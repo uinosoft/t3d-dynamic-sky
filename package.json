@@ -1,0 +1,62 @@
+{
+  "name": "t3d-dynamic-sky",
+  "version": "0.0.2",
+  "description": "Dynamic sky addon for t3d.",
+  "main": "./build/t3d.dynamicsky.js",
+  "module": "./build/t3d.dynamicsky.module.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UINOSOFT/t3d-dynamic-sky"
+  },
+  "files": [
+    "build/t3d.dynamicsky.js",
+    "build/t3d.dynamicsky.min.js",
+    "build/t3d.dynamicsky.module.js",
+    "LICENSE",
+    "package.json",
+    "README.md",
+    "src"
+  ],
+  "keywords": [
+    "sky",
+    "t3d",
+    "javascript",
+    "3d",
+    "webgl",
+    "webgl2",
+    "canvas",
+    "html5"
+  ],
+  "directories": {
+    "example": "examples"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "./tools/.eslintrc.cjs"
+    ],
+    "plugins": [
+      "html"
+    ]
+  },
+  "author": "uino",
+  "license": "BSD-3-Clause",
+  "devDependencies": {
+    "@babel/core": "^7.18.13",
+    "@babel/preset-env": "^7.18.10",
+    "@rollup/plugin-babel": "^5.3.1",
+    "eslint": "^7.32.0",
+    "eslint-plugin-html": "^7.1.0",
+    "rollup": "^2.78.1",
+    "rollup-plugin-terser": "^7.0.2"
+  },
+  "peerDependencies": {
+    "t3d": "^0.1.1"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -w -c",
+    "lint": "eslint src",
+    "lint-fix": "eslint src --fix"
+  }
+}

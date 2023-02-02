@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>t3d - timeline</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link rel="stylesheet" type="text/css" href="./main.css">
+</head>
+
+<body>
+	<!-- Import maps polyfill -->
+	<!-- Remove this when import maps will be widely supported -->
+	<script async src="./libs/es-module-shims.js"></script>
+
+	<script type="importmap">
+		{
+			"imports": {
+				"t3d": "./libs/t3d/build/t3d.module.js",
+				"t3d/examples/jsm/": "./libs/t3d/examples/jsm/",
+				"t3d-dynamic-sky": "../build/t3d.dynamicsky.module.js"
+			}
+		}
+	</script>
+
+	<script type="module">
+		import * as t3d from 't3d';
+		import { Clock } from 't3d/examples/jsm/Clock.js';
+		import { ForwardRenderer } from 't3d/examples/jsm/render/ForwardRenderer.js';
+		import { OrbitControls } from 't3d/examples/jsm/controls/OrbitControls.js';
+		import { Texture2DLoader } from 't3d/examples/jsm/loaders/Texture2DLoader.js';
+		import { TextureCubeLoader } from 't3d/examples/jsm/loaders/TextureCubeLoader.js';
+
+		import { SkyPrecomputeUtil, Clouds, Stars, Sky, SkyTimeline } from "t3d-dynamic-sky";
+
+		import { GUI } from './libs/lil-gui.esm.min.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+		const forwardRenderer = new ForwardRenderer(canvas, { antialias: true, alpha: false });
+		forwardRenderer.renderPass.setClearColor(0, 0, 0, 0);
+
+		const capabilities = forwardRenderer.renderPass.capabilities;
+
+		const skyPrecomputeUtil = new SkyPrecomputeUtil(capabilities);
+		skyPrecomputeUtil.computeTransmittance(forwardRenderer);
+		skyPrecomputeUtil.computeInscatter(forwardRenderer);
+
+		const scene = new t3d.Scene();
+		scene.environmentLightIntensity = 0.8;
+
+		const cube_texture = new TextureCubeLoader().load([
+			"./textures/cube/Night/px.jpg",
+			"./textures/cube/Night/nx.jpg",
+			"./textures/cube/Night/py.jpg",
+			"./textures/cube/Night/ny.jpg",
+			"./textures/cube/Night/pz.jpg",
+			"./textures/cube/Night/nz.jpg"
+		]);
+
+		const camera = new t3d.Camera();
+		camera.setPerspective(70 / 180 * Math.PI, width / height, 0.01, 1000);
+		camera.position.set(0, 0.5, 10);
+		scene.add(camera);
+
+		const sphere_geometry = new t3d.SphereGeometry(0.5, 20, 20);
+		const sphere_material = new t3d.PBRMaterial();
+		sphere_material.diffuse.setHex(0xffffff);
+		sphere_material.roughness = 0.7;
+		sphere_material.metalness = 0.3;
+		const sphere = new t3d.Mesh(sphere_geometry, sphere_material);
+		sphere.castShadow = true;
+		scene.add(sphere);
+
+		const plane_geometry = new t3d.PlaneGeometry(5, 5);
+		const plane_material = new t3d.PBRMaterial();
+		plane_material.roughness = 1;
+		plane_material.metalness = 0;
+		plane_material.diffuse.setHex(0xffffff);
+		const plane = new t3d.Mesh(plane_geometry, plane_material);
+		plane.position.y = -0.5;
+		plane.receiveShadow = true;
+		scene.add(plane);
+
+		const sunLight = new t3d.DirectionalLight();
+		sunLight.castShadow = true;
+		sunLight.shadow.windowSize = 15;
+		scene.add(sunLight);
+
+		const moonLight = new t3d.DirectionalLight();
+		moonLight.castShadow = true;
+		moonLight.shadow.windowSize = 15;
+		scene.add(moonLight);
+
+		const hemisphereLight = new t3d.HemisphereLight();
+		hemisphereLight.intensity = 1;
+		scene.add(hemisphereLight);
+
+		const clouds = new Clouds();
+		clouds.renderOrder = 2;
+		clouds.material.blending = t3d.BLEND_TYPE.NORMAL;
+		// clouds.visible = false;
+		scene.add(clouds);
+
+		const textureLoader = new Texture2DLoader();
+
+		const texture = textureLoader.load("./textures/Sample_Rectangular_2048.jpg");
+		texture.anisotropy = 16;
+		texture.wrapS = texture.wrapT = t3d.TEXTURE_WRAP.REPEAT;
+
+		const material = clouds.material;
+		material.uniforms._CameraFar = 1000;
+		material.uniforms._CloudSampler = texture;
+		material.uniforms._SkyColor = [158 / 255, 158 / 255, 158 / 255];
+
+		const sky = new Sky();
+		// sky.material.transparent = true;
+		// sky.material.defines.COLORSPACE_GAMMA = true;
+		// sky.material.defines.SKY_HDR_MODE = true;
+		scene.add(sky);
+
+		const moonTexture = textureLoader.load("./textures/Full_Moon_glow.jpg");
+		moonTexture.anisotropy = 16;
+
+		const skyMaterial = sky.material;
+		skyMaterial.uniforms._Inscatter = skyPrecomputeUtil.inscatterTexture;
+		skyMaterial.uniforms._Transmittance = skyPrecomputeUtil.transmittanceTexture;
+		skyMaterial.uniforms._MoonSampler = moonTexture;
+		skyMaterial.uniforms._OuterSpaceCube = cube_texture;
+		skyMaterial.uniforms._SkyExposure = 1;
+		skyMaterial.uniforms._CameraFar = 800;
+		skyMaterial.uniforms.betaR = skyPrecomputeUtil.betaR;
+
+		const sphereGeometry = new t3d.SphereGeometry(1);
+
+		const sunMaterial = new t3d.BasicMaterial();
+		sunMaterial.diffuse.setRGB(1, 0, 0);
+		const sun = new t3d.Mesh(sphereGeometry, sunMaterial);
+		sun.visible = false;
+		scene.add(sun);
+
+		const moonMaterial = new t3d.BasicMaterial();
+		moonMaterial.diffuse.setRGB(0, 0, 1);
+		const moon = new t3d.Mesh(sphereGeometry, moonMaterial);
+		moon.visible = false;
+		scene.add(moon);
+
+		const controller = new OrbitControls(camera, canvas);
+		controller.target.set(0, 0, -0.5);
+
+		let stars;
+
+		fetch('./StarsData.bytes')
+			.then(res => res.blob())
+			.then(blob => {
+				const reader = new FileReader();
+				reader.readAsArrayBuffer(blob);
+				reader.onload = function(e) {
+					const bytesArray = new Float32Array(e.target.result);
+
+					stars = new Stars(bytesArray);
+					stars.renderOrder = 1;
+					stars.material.transparent = true;
+					stars.material.blending = t3d.BLEND_TYPE.ADD;
+					stars.material.uniforms._CameraFar = 1000;
+					scene.add(stars);
+
+					const skyTimeline = new SkyTimeline({
+						sunLight, moonLight, hemisphereLight, clouds, sky, stars
+					});
+
+					skyTimeline._sunAndMoon.sunEquatorOffset = 60;
+					skyTimeline._lightExposure = 0.5;
+					skyTimeline.timeline = 14;
+
+					initGUI(skyTimeline);
+				}
+			});
+
+		function initGUI(skyTimeline) {
+			function refreshTimeline() {
+				skyTimeline.refresh();
+			}
+		
+			const gui = new GUI();
+
+			gui.add(skyTimeline, 'timeline', 0, 24, 0.01);
+			gui.add(skyTimeline, '_sunSize', 0, 10, 0.01).onChange(refreshTimeline).name("Sun Size");
+
+			const directionFolder = gui.addFolder('Direction');
+
+			directionFolder.add(skyTimeline._sunAndMoon, "sunDirection", -180, 180, 0.01).onChange(refreshTimeline).name("Sun Direction");
+			directionFolder.add(skyTimeline._sunAndMoon, "sunEquatorOffset", -60, 60, 0.01).onChange(refreshTimeline).name("Sun Equator Offset");
+
+			directionFolder.close();
+
+			const nightSkyFolder = gui.addFolder('Night Sky');
+
+			nightSkyFolder.addColor(skyTimeline._nightSkySettings, "moonInnerCorona").onChange(refreshTimeline).name("Moon Inner Corona");
+			nightSkyFolder.addColor(skyTimeline._nightSkySettings, "moonOuterCorona").onChange(refreshTimeline).name("Moon Outer Corona");
+
+			nightSkyFolder.add(skyTimeline._nightSkySettings.moonInnerCorona, '3', 0, 1, 0.001).onChange(refreshTimeline).name("Inner Corona Factor");
+			nightSkyFolder.add(skyTimeline._nightSkySettings.moonOuterCorona, '3', 0, 1, 0.001).onChange(refreshTimeline).name("Outer Corona Factor");
+
+			nightSkyFolder.add(skyTimeline._nightSkySettings, 'moonSize', 0, 2, 0.01).onChange(refreshTimeline).name("Moon Size");
+
+			nightSkyFolder.addColor(skyTimeline._nightSkySettings, "nightHorizonColor").onChange(refreshTimeline).name("Night Horizon Color");
+			nightSkyFolder.addColor(skyTimeline._nightSkySettings, "nightZenithColor").onChange(refreshTimeline).name("Night Zenith Color");
+
+			nightSkyFolder.add(skyTimeline._nightSkySettings.nightHorizonColor, '3', 0, 1, 0.001).onChange(refreshTimeline).name("Night Horizon Factor");
+			nightSkyFolder.add(skyTimeline._nightSkySettings.nightZenithColor, '3', 0, 1, 0.001).onChange(refreshTimeline).name("Night Zenith Factor");
+
+			nightSkyFolder.close();
+
+			const cloudsFolder = gui.addFolder('Clouds');
+
+			cloudsFolder.addColor(material.uniforms, "_SkyColor").name("Sky Color");
+		}
+		
+		const clock = new Clock();
+		function loop(count) {
+			requestAnimationFrame(loop);
+
+			controller.update();
+
+			const deltaTime = clock.getDelta();
+
+			material.uniforms._Rotation = count * 0.0005;
+
+			if (stars) {
+				stars.material.uniforms._Time += deltaTime / 1000 * 500;
+			}
+
+			forwardRenderer.render(scene, camera);
+		}
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(70 / 180 * Math.PI, width / height, 1, 1000);
+
+			forwardRenderer.backRenderTarget.resize(width, height);
+		}
+		window.addEventListener("resize", onWindowResize, false);
+	</script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>t3d - clouds</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+</head>
+
+<body>
+	<!-- Import maps polyfill -->
+	<!-- Remove this when import maps will be widely supported -->
+	<script async src="./libs/es-module-shims.js"></script>
+
+	<script type="importmap">
+		{
+			"imports": {
+				"t3d": "./libs/t3d/build/t3d.module.js",
+				"t3d/examples/jsm/": "./libs/t3d/examples/jsm/",
+				"t3d-dynamic-sky": "../build/t3d.dynamicsky.module.js"
+			}
+		}
+	</script>
+
+	<script type="module">
+		import * as t3d from 't3d';
+		import { ForwardRenderer } from 't3d/examples/jsm/render/ForwardRenderer.js';
+		import { OrbitControls } from 't3d/examples/jsm/controls/OrbitControls.js';
+		import { Texture2DLoader } from 't3d/examples/jsm/loaders/Texture2DLoader.js';
+		import { TextureCubeLoader } from 't3d/examples/jsm/loaders/TextureCubeLoader.js';
+
+		import { Clouds } from "t3d-dynamic-sky";
+
+		import { GUI } from './libs/lil-gui.esm.min.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+
+		const skyCanvas = document.createElement('canvas');
+		skyCanvas.width = 32;
+		skyCanvas.height = window.innerHeight;
+
+		const context = skyCanvas.getContext('2d');
+
+		const gradient = context.createLinearGradient(0, 0, 0, skyCanvas.height);
+		gradient.addColorStop(0, "#1e4877");
+		gradient.addColorStop(0.5, "#4584b4")
+
+		context.fillStyle = gradient;
+		context.fillRect(0, 0, skyCanvas.width, skyCanvas.height);
+		container.style.background = 'url(' + skyCanvas.toDataURL('image/png') + ')';
+		container.style.backgroundSize = '32px 100%';
+
+		const cloudsCanvas = document.createElement('canvas');
+		cloudsCanvas.width = width;
+		cloudsCanvas.height = height;
+		container.appendChild(cloudsCanvas);
+		const forwardRenderer = new ForwardRenderer(cloudsCanvas, { antialias: true, alpha: true });
+		forwardRenderer.renderPass.setClearColor(0, 0, 0, 0);
+
+		const scene = new t3d.Scene();
+		scene.environmentLightIntensity = 0.8;
+
+		const cube_texture = new TextureCubeLoader().load([
+			"./textures/cube/BlueSky/posx.jpg",
+			"./textures/cube/BlueSky/negx.jpg",
+			"./textures/cube/BlueSky/posy.jpg",
+			"./textures/cube/BlueSky/negy.jpg",
+			"./textures/cube/BlueSky/posz.jpg",
+			"./textures/cube/BlueSky/negz.jpg"
+		]);
+		scene.environment = cube_texture;
+
+		const camera = new t3d.Camera();
+		camera.setPerspective(70 / 180 * Math.PI, width / height, 0.01, 1000);
+		camera.position.set(0, 1, 5)
+		scene.add(camera);
+
+		const sphere_geometry = new t3d.SphereGeometry(0.5, 20, 20);
+		const sphere_material = new t3d.PBRMaterial();
+		sphere_material.diffuse.setHex(0xffffff);
+		sphere_material.roughness = 0.7;
+		sphere_material.metalness = 0.3;
+		const sphere = new t3d.Mesh(sphere_geometry, sphere_material);
+		sphere.castShadow = true;
+		scene.add(sphere);
+
+		const plane_geometry = new t3d.PlaneGeometry(5, 5);
+		const plane_material = new t3d.PBRMaterial();
+		plane_material.roughness = 1;
+		plane_material.metalness = 0;
+		plane_material.diffuse.setHex(0xffffff);
+		const plane = new t3d.Mesh(plane_geometry, plane_material);
+		plane.position.y = -0.5;
+		plane.receiveShadow = true;
+		scene.add(plane);
+
+		const directionalLight = new t3d.DirectionalLight(0xffffff, 0.3);
+		directionalLight.position.set(-10, 20, 30);
+		directionalLight.castShadow = true;
+		directionalLight.shadow.windowSize = 15;
+		scene.add(directionalLight);
+
+		const clouds = new Clouds();
+		scene.add(clouds);
+
+		const texture = new Texture2DLoader().load("./textures/Sample_Rectangular_2048.jpg");
+		texture.anisotropy = 16;
+		texture.wrapS = texture.wrapT = t3d.TEXTURE_WRAP.REPEAT;
+
+		const material = clouds.material;
+		material.uniforms._CameraFar = 1000;
+		material.uniforms._CloudSampler = texture;
+
+		const sphereGeometry = new t3d.SphereGeometry(1);
+
+		const sunMaterial = new t3d.BasicMaterial();
+		sunMaterial.diffuse.setRGB(1, 0, 0);
+		const sun = new t3d.Mesh(sphereGeometry, sunMaterial);
+		scene.add(sun);
+
+		const moonMaterial = new t3d.BasicMaterial();
+		moonMaterial.diffuse.setRGB(0, 0, 1);
+		const moon = new t3d.Mesh(sphereGeometry, moonMaterial);
+		scene.add(moon);
+
+		const controller = new OrbitControls(camera, cloudsCanvas);
+		controller.target.set(0, 0, -0.5);
+
+		const spherical = new t3d.Spherical(50, Math.PI / 4, Math.PI / 4);
+		const vector3 = new t3d.Vector3();
+
+		function setSunAndMoonDir() {
+			vector3.setFromSpherical(spherical);
+
+			sun.position.copy(vector3);
+			moon.position.copy(vector3).multiplyScalar(-1);
+
+			directionalLight.position.copy(vector3);
+			directionalLight.lookAt(new t3d.Vector3(), new t3d.Vector3(0, 1, 0));
+
+			vector3.normalize();
+
+			vector3.toArray(material.uniforms['_MoonDirSize']);
+			vector3.multiplyScalar(-1);
+			vector3.toArray(material.uniforms['_SunDirSize']);
+		}
+
+		setSunAndMoonDir();
+
+		const gui = new GUI();
+
+		gui.add(material.uniforms, "_HeightOffset", -20, 20, 1).name("Height Offset");
+		gui.add(material.uniforms, "_StepSize", 0.001, 0.02, 0.001).name("Step size");
+
+		gui.add(material.uniforms, "_Attenuation", 0, 5, 0.01).name("Attenuation");
+		gui.add(material.uniforms, "_AlphaSaturation", 1, 10, 0.01).name("Alpha Saturation");
+		gui.add(material.uniforms, "_Mask", 0, 4, 0.01).name("Clouds Density");
+
+		gui.addColor(material.uniforms, "_NightZenithColor").name("Night Zenith Color");
+		gui.addColor(material.uniforms, "_SkyColor").name("Sky Color");
+		gui.addColor(material.uniforms, "_SkyLightColor").name("Sky Light Color");
+
+		gui.add(material.uniforms, "_LightColorMultiplier", 0, 10, 0.01).name("Light Color Multiplier");
+		gui.add(material.uniforms, "_SkyColorMultiplier", 0, 10, 0.01).name("Sky Color Multiplier");
+
+		gui.add(material.uniforms, "_SkyMieG", 0, 2, 0.01).name("SkyMieG");
+		gui.add(material.uniforms, "_ScatterMultiplier", 0, 10, 0.01).name("Scatter Multiplier");
+
+		gui.add(material.uniforms._uSkyNightParams, 0, 0, 1, 0.01).name("Night Param0");
+		gui.add(material.uniforms._uSkyNightParams, 1, 0, 1, 0.01).name("Night Param1");
+		
+		gui.add(spherical, 'phi', 0, Math.PI).onChange(setSunAndMoonDir);
+		gui.add(spherical, 'theta', 0, Math.PI * 2).onChange(setSunAndMoonDir);
+
+		function loop(count) {
+			requestAnimationFrame(loop);
+			controller.update();
+			material.uniforms._Rotation = count * 0.001;
+			forwardRenderer.render(scene, camera);
+		}
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(70 / 180 * Math.PI, width / height, 1, 1000);
+
+			forwardRenderer.backRenderTarget.resize(width, height);
+		}
+		window.addEventListener("resize", onWindowResize, false);
+	</script>
+</body>
+</html>

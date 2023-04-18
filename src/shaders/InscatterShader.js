@@ -56,7 +56,7 @@ export const InscatterShader = {
                 // paper formula 
                 // muS = -(0.6 + log(1.0 - muS * (1.0 -  exp(-3.6)))) / 3.0; 
                 // better formula 
-                muS = tan((2.0 * muS - 1.0 + 0.26) * 1.1) / tan(1.26 * 1.1); 
+                muS = tan((2.0 * muS - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75); 
                 nu = -1.0 + floor(x / float(RES_MU_S)) / (float(RES_NU) - 1.0) * 2.0; 
             #else 
                 mu = -1.0 + 2.0 * y / (float(RES_MU) - 1.0); 

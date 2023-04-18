@@ -2814,7 +2814,7 @@ const SkyShader = {
 	defines: {
 		SKY_MULTISAMPLE: true,
 		SKY_SUNDISK: true,
-		COLORSPACE_GAMMA: false,
+		COLORSPACE_GAMMA: true,
 		SKY_HDR_MODE: false
 	},
 	uniforms: {
@@ -2975,7 +2975,7 @@ const SkyShader = {
                 // paper formula
                 // float uMuS = 0.5 / RES_MU_S + max((1.0 - exp(-3.0 * muS - 0.6)) / (1.0 - exp(-3.6)), 0.0) * (1.0 - 1.0 / RES_MU_S);
                 // better formula
-                float uMuS = 0.5 / RES_MU_S + (atan(max(muS, -0.1975) * tan(1.26 * 1.1)) / 1.1 + (1.0 - 0.26)) * 0.5 * (1.0 - 1.0 / RES_MU_S);
+                float uMuS = 0.5 / RES_MU_S + (atan(max(muS, -0.1975) * tan(1.26 * 0.75)) / 0.75 + (1.0 - 0.26)) * 0.5 * (1.0 - 1.0 / RES_MU_S);
 
                 if (_SkyboxOcean < 0.5) {
                     uMu = rmu < 0.0 && delta > 0.0 ? 0.975 : uMu * 0.975 + 0.015 * uMuS; // 0.975 to fix the horizion seam. 0.015 to fix zenith artifact
@@ -3090,9 +3090,9 @@ const SkyShader = {
         }
 
         vec3 hdr(vec3 L) {
-            L.r = L.r < 1.413 ? pow(L.r * 0.38317, 1.0 / 2.2) : 1.0 - exp(-L.r);
-            L.g = L.g < 1.413 ? pow(L.g * 0.38317, 1.0 / 2.2) : 1.0 - exp(-L.g);
-            L.b = L.b < 1.413 ? pow(L.b * 0.38317, 1.0 / 2.2) : 1.0 - exp(-L.b);
+            L.r = mix(1.0 - exp(-L.r), pow(L.r * 0.38317, 1.0 / 2.2), step(L.r, 1.413));
+            L.g = mix(1.0 - exp(-L.g), pow(L.g * 0.38317, 1.0 / 2.2), step(L.g, 1.413));
+            L.b = mix(1.0 - exp(-L.b), pow(L.b * 0.38317, 1.0 / 2.2), step(L.b, 1.413));
             return L;
         }
 
@@ -3105,7 +3105,7 @@ const SkyShader = {
         #if defined(COLORSPACE_GAMMA)
             #define COLOR_2_LINEAR(color) color * (0.4672 * color + 0.266)
             #define GAMMA_2_OUTPUT(color) color
-            #define HDR_OUTPUT(color)  pow(color * 1.265, 0.735)
+            #define HDR_OUTPUT(color) pow(color * 1.265, vec3(0.735))
         #else
             #define COLOR_2_LINEAR(color) color * color
             #define GAMMA_2_OUTPUT(color) color * color
@@ -3165,10 +3165,10 @@ const SkyShader = {
 				// col += (sun * SUN_BRIGHTNESS) * extinction ;
             #endif
 
-            float alpha = mix(1.0, max(1e-3, moonMask + (1. - gr)), _uSkyNightParams.x);
+            // float alpha = mix(1.0, max(1e-3, moonMask + (1. - gr)), _uSkyNightParams.x);
+            // gl_FragColor = vec4(col, alpha);
 
-            gl_FragColor = vec4(col, alpha);
-            // gl_FragColor = vec4(col, 1.);
+            gl_FragColor = vec4(col, 1.);
         }
     `
 };
@@ -3368,7 +3368,7 @@ const InscatterShader = {
                 // paper formula 
                 // muS = -(0.6 + log(1.0 - muS * (1.0 -  exp(-3.6)))) / 3.0; 
                 // better formula 
-                muS = tan((2.0 * muS - 1.0 + 0.26) * 1.1) / tan(1.26 * 1.1); 
+                muS = tan((2.0 * muS - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75); 
                 nu = -1.0 + floor(x / float(RES_MU_S)) / (float(RES_NU) - 1.0) * 2.0; 
             #else 
                 mu = -1.0 + 2.0 * y / (float(RES_MU) - 1.0); 

@@ -119,9 +119,8 @@
 		material.uniforms._SkyColor = [158 / 255, 158 / 255, 158 / 255];
 
 		const sky = new Sky();
-		// sky.material.transparent = true;
-		// sky.material.defines.COLORSPACE_GAMMA = true;
-		// sky.material.defines.SKY_HDR_MODE = true;
+		sky.material.transparent = true;
+		sky.material.defines.SKY_HDR_MODE = false;
 		scene.add(sky);
 
 		const moonTexture = textureLoader.load("./textures/Full_Moon_glow.jpg");
@@ -191,12 +190,14 @@
 
 			gui.add(skyTimeline, 'timeline', 0, 24, 0.01);
 			gui.add(skyTimeline, '_sunSize', 0, 10, 0.01).onChange(refreshTimeline).name("Sun Size");
+			gui.add(skyMaterial.uniforms, "_SkyMieG", 0, 1, 0.01).onChange(refreshTimeline).name("Sun Anisotropy Factor");
+			gui.add(skyMaterial.uniforms, "_SkyMieScale", 0, 2, 0.01).onChange(refreshTimeline).name("Mie Scattering");
 
 			const directionFolder = gui.addFolder('Direction');
 
 			directionFolder.add(skyTimeline._sunAndMoon, "sunDirection", -180, 180, 0.01).onChange(refreshTimeline).name("Sun Direction");
 			directionFolder.add(skyTimeline._sunAndMoon, "sunEquatorOffset", -60, 60, 0.01).onChange(refreshTimeline).name("Sun Equator Offset");
-
+		
 			directionFolder.close();
 
 			const nightSkyFolder = gui.addFolder('Night Sky');

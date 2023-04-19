@@ -1060,15 +1060,18 @@ float Limit(float r, float mu) {
 	class SkyPrecomputeUtil {
 		constructor(capabilities) {
 			const isWebGL2 = capabilities.version > 1;
+
+			// ios provides a poor implementation of float linear, so fallback to Half Float
+			const isIOS = /(iPad|iPhone|iPod)/g.test(navigator.userAgent);
 			let type;
 			if (isWebGL2) {
-				if (capabilities.getExtension("EXT_color_buffer_float") && capabilities.getExtension("OES_texture_float_linear")) {
+				if (capabilities.getExtension("EXT_color_buffer_float") && capabilities.getExtension("OES_texture_float_linear") && !isIOS) {
 					type = t3d__namespace.PIXEL_TYPE.FLOAT;
 				} else {
 					type = t3d__namespace.PIXEL_TYPE.HALF_FLOAT;
 				}
 			} else {
-				if (capabilities.getExtension("OES_texture_float") && capabilities.getExtension("OES_texture_float_linear")) {
+				if (capabilities.getExtension("OES_texture_float") && capabilities.getExtension("OES_texture_float_linear") && !isIOS) {
 					type = t3d__namespace.PIXEL_TYPE.FLOAT;
 				} else if (capabilities.getExtension("OES_texture_half_float") && capabilities.getExtension("OES_texture_half_float_linear")) {
 					type = t3d__namespace.PIXEL_TYPE.HALF_FLOAT;

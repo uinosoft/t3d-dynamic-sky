@@ -7,7 +7,7 @@
   "module": "./build/t3d.dynamicsky.module.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/UINOSOFT/t3d-dynamic-sky"
+    "url": "https://github.com/uinosoft/t3d-dynamic-sky"
   },
   "files": [
     "build/t3d.dynamicsky.js",
@@ -52,7 +52,7 @@
     "rollup": "^3.20.2"
   },
   "peerDependencies": {
-    "t3d": "^0.1.1"
+    "t3d": "^0.2.0"
   },
   "scripts": {
     "build": "rollup -c",

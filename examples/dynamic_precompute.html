@@ -41,11 +41,11 @@
 
 		const contextParams = { antialias: false, alpha: false };
 		const gl = canvas.getContext("webgl2", contextParams) || cloudsCanvas.getContext("webgl", contextParams);
-		const renderer = new t3d.Renderer(gl);
+		const renderer = new t3d.WebGLRenderer(gl);
 
 		const backRenderTarget = new t3d.RenderTargetBack(canvas);
 
-		const capabilities = renderer.renderPass.capabilities;
+		const capabilities = renderer.capabilities;
 		
 		const skyPrecomputeUtil = new SkyPrecomputeUtil(capabilities);
 		skyPrecomputeUtil.computeTransmittance(renderer);
@@ -90,9 +90,9 @@
 			scene.updateRenderStates(camera);
 			scene.updateRenderQueue(camera);
 
-			renderer.renderPass.setRenderTarget(backRenderTarget);
-			renderer.renderPass.setClearColor(0.2, 0.2, 0.2, 1);
-			renderer.renderPass.clear(true, true, true);
+			renderer.setRenderTarget(backRenderTarget);
+			renderer.setClearColor(0.2, 0.2, 0.2, 1);
+			renderer.clear(true, true, true);
 			renderer.renderScene(scene, camera);
 		}
 		requestAnimationFrame(loop);

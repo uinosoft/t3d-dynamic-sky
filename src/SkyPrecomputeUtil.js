@@ -81,16 +81,16 @@ export class SkyPrecomputeUtil {
 	}
 
 	computeTransmittance(renderer) {
-		renderer.renderPass.setRenderTarget(this._transmittanceRT);
-		renderer.renderPass.setClearColor(0, 0, 0, 0);
-		renderer.renderPass.clear(true, true, true);
+		renderer.setRenderTarget(this._transmittanceRT);
+		renderer.setClearColor(0, 0, 0, 0);
+		renderer.clear(true, true, true);
 		this._transmittancePass.render(renderer);
 	}
 
 	computeInscatter(renderer) {
-		renderer.renderPass.setRenderTarget(this._inscatterRT);
-		renderer.renderPass.setClearColor(0, 0, 0, 0);
-		renderer.renderPass.clear(true, true, true);
+		renderer.setRenderTarget(this._inscatterRT);
+		renderer.setClearColor(0, 0, 0, 0);
+		renderer.clear(true, true, true);
 		this._inscatterPass.render(renderer);
 	}
 

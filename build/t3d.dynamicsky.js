@@ -371,7 +371,9 @@
 			SKY_MULTISAMPLE: true,
 			SKY_SUNDISK: true,
 			COLORSPACE_GAMMA: true,
-			SKY_HDR_MODE: false
+			SKY_HDR_MODE: false,
+			// fix bug in NIVIDIA 3080
+			FIX_INSCATTER_SAMPLE: false
 		},
 		uniforms: {
 			_CameraFar: 1000,
@@ -499,6 +501,13 @@
 				#define TRANSMITTANCE_NON_LINEAR	
 				#define INSCATTER_NON_LINEAR
 
+				#ifdef FIX_INSCATTER_SAMPLE
+						float fixU(float u) {
+								float fixNumber = mod(u, 1.0 / RES_NU);
+								return 3.0 / RES_NU + fixNumber;
+						}
+				#endif
+
 				vec4 Texture4D(sampler2D table, float r, float mu, float muS, float nu) {
 						float H = sqrt(Rt * Rt - Rg * Rg);
 						float rho = sqrt(r * r - Rg * Rg);
@@ -543,6 +552,11 @@
 								float uv_0Y = uMu / RES_R + u_0;
 								float uv_1Y = uMu / RES_R + u_1;
 								float OneMinusLep = 1.0 - lep;
+
+								#ifdef FIX_INSCATTER_SAMPLE
+										uv_0X = fixU(uv_0X);
+										uv_1X = fixU(uv_1X);
+								#endif
 
 								vec4 A = texture2D(table, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_0Y)) * lep;	
 								vec4 B = texture2D(table, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_1Y)) * lep;	

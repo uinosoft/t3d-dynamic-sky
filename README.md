@@ -13,6 +13,7 @@ Dynamic sky addon for [t3d.js](https://github.com/uinosoft/t3d.js).
 
 ### Todo List
 
+* Use Texture2DArray for Inscatter Texture
 * REALISTIC SETTINGS : LOCATION AND DATE
 
 [npm]: https://img.shields.io/npm/v/t3d-dynamic-sky

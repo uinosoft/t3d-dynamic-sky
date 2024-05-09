@@ -2671,14 +2671,16 @@ const StarsShader = {
 	uniforms: {
 		_CameraFar: 1000,
 		_StarIntensity: 40,
+		_HeightFalloff: 0.5,
 		_StarSize: 10,
+		_RadiusFactor: 0.4,
 		_Time: 0,
 		_StarRotationMatrix: [
 			1, 0, 0, 0,
 			0, 1, 0, 0,
 			0, 0, 1, 0,
 			0, 0, 0, 1
-		],
+		]
 	},
 	vertexShader: `
         attribute vec3 a_Position;
@@ -2691,6 +2693,7 @@ const StarsShader = {
 
 		uniform float _CameraFar;
 		uniform float _StarIntensity;
+		uniform float _HeightFalloff;
 		uniform float _StarSize;
 		uniform float _Time;
 		uniform mat4 _StarRotationMatrix;
@@ -2720,83 +2723,68 @@ const StarsShader = {
 		} 
 
 		void main() {
-			vec3 t = (_StarRotationMatrix * vec4(a_Position.xyz, 1.0)).xyz * _CameraFar + u_CameraPosition.xyz;
-			vec4 transformed = vec4(t, 1.0);
+			vec3 unitPosition = normalize((_StarRotationMatrix * vec4(a_Position.xyz, 1.0)).xyz);
 
+			vec4 transformed = vec4(unitPosition * _CameraFar + u_CameraPosition.xyz, 1.0);
 			gl_Position = u_ProjectionView * u_Model * transformed;
 
 			float appMag = 6.5 + a_Color.w * (-1.44 - 1.5);
 			float brightness = GetFlickerAmount(a_Position.xy) * pow(5.0, (-appMag - 1.44) / 2.5);
 
-			vColor = (t.y > 0.0 ? _StarIntensity : 0.0) * vec4(brightness * a_Color.xyz, brightness);
+			vColor = smoothstep(0.0, _HeightFalloff, unitPosition.y) * _StarIntensity * vec4(brightness * a_Color.xyz, brightness);
 			
 			gl_PointSize = _StarSize;
 		}
     `,
 	fragmentShader: `
+		uniform float _RadiusFactor;
+
         varying vec4 vColor;
 
         void main() {
-            vec2 distCenter = 6.5 * gl_PointCoord - 6.5 * vec2(0.5, 0.5);
-            float scale = exp(-dot(distCenter, distCenter));
-            vec3 col = vColor.xyz * scale + 5. * vColor.w * pow(scale, 10.);
+            vec2 distCenter = 2.0 * gl_PointCoord - vec2(1.0);
+            float scale = exp(-dot(distCenter, distCenter) * 10.24 * _RadiusFactor);
 
-			// col = col * col * 2.;
+            vec3 col = vColor.xyz * scale + 5. * vColor.w * pow(scale, 10.);
 
             gl_FragColor = vec4(col, 1.);
         }
     `
 };
 
+/**
+ * Stars is a mesh that represents the stars in the sky.
+ */
 class Stars extends t3d.Mesh {
 
-	// Note: To improve performance, we sort stars by brightness and remove less important stars.
-	// 6.225e-2f  0.06225 	 // 1024 predefined stars.
-	// 3.613e-2f  0.03613	 // 2047 predefined stars.
-	// 2.0344e-2f  0.020344	 // 4096 predefined stars.
-	constructor(starsArray, threshold = 0.06225) {
+	/**
+	 * Creates a new Stars instance.
+	 * @param {Array} starsArray - The stars array. Each star is represented by 6 values: x, y, z, r, g, b.
+	 * @param {Object|Number} [options] - The options object or the threshold value.
+	 * @param {Number} [options.brightThreshold=0.06225] - The threshold to remove less important stars.
+	 * @param {Number} [options.brightMax=0.8] - The maximum brightness value.
+	 * @param {Boolean} [options.zUp=true] - Whether the z coordinate is up in the stars array.
+	 */
+	constructor(starsArray, options = {}) {
+		if (typeof options === 'number') options = { brightThreshold: options };
+
+		// Default options values are compatible with the real stars data `StarsData.bytes` provided in examples.
+		// Note: To improve performance, we check stars by brightness and remove less important stars.
+		// 6.225e-2f  0.06225 	 // 1024 predefined stars.
+		// 3.613e-2f  0.03613	 // 2047 predefined stars.
+		// 2.0344e-2f  0.020344	 // 4096 predefined stars.
+		options.brightThreshold = options.brightThreshold !== undefined ? options.brightThreshold : 0.06225;
+		options.brightMax = options.brightMax !== undefined ? options.brightMax : 0.8;
+		options.zUp = options.zUp !== undefined ? options.zUp : true;
+
+		const geometry = new StarsGeometry();
+		geometry.setPoints(starsArray, options);
+
 		const material = new t3d.ShaderMaterial(StarsShader);
 		material.transparent = true;
 		material.blending = t3d.BLEND_TYPE.ADD;
-		// material.blending = t3d.BLEND_TYPE.CUSTOM;
-		// material.blendDst = t3d.BLEND_FACTOR.ONE_MINUS_DST_ALPHA;
-		// material.blendSrc = t3d.BLEND_FACTOR.ONE_MINUS_SRC_ALPHA;
 		material.depthWrite = false;
 		material.drawMode = t3d.DRAW_MODE.POINTS;
-
-		const starsNumber = 9110;
-
-		const positions = [];
-		const colors = [];
-
-		for (let i = 0; i < starsNumber; i++) {
-			_vec3_1$1.x = starsArray[i * 6 + 0];
-			_vec3_1$1.z = starsArray[i * 6 + 1];
-			_vec3_1$1.y = starsArray[i * 6 + 2]; // Z-up to Y-up
-
-			_vec3_2$1.fromArray(starsArray, i * 6 + 3);
-			const magnitude = _vec3_2$1.getLength(); // Using Vector3.getLength term to sort the brightness of star magnitude
-
-			if (magnitude < threshold) continue;
-
-			if (magnitude > 2.7) { // 5.7 fix an over bright star (Sirius)?
-				_vec4_1$1.set(_vec3_2$1.x, _vec3_2$1.y, _vec3_2$1.z, magnitude).normalize().multiplyScalar(0.5);
-			} else {
-				_vec4_1$1.set(_vec3_2$1.x, _vec3_2$1.y, _vec3_2$1.z, magnitude);
-			}
-
-			positions.push(_vec3_1$1.x, _vec3_1$1.y, _vec3_1$1.z);
-			colors.push(_vec4_1$1.x, _vec4_1$1.y, _vec4_1$1.z, _vec4_1$1.w);
-		}
-
-		const geometry = new t3d.Geometry();
-		const positionAttribute = new t3d.Attribute(new t3d.Buffer(new Float32Array(positions), 3));
-		geometry.addAttribute('a_Position', positionAttribute);
-		const colorAttribute = new t3d.Attribute(new t3d.Buffer(new Float32Array(colors), 4));
-		geometry.addAttribute('a_Color', colorAttribute);
-
-		geometry.computeBoundingBox();
-		geometry.computeBoundingSphere();
 
 		super(geometry, material);
 
@@ -2808,6 +2796,53 @@ class Stars extends t3d.Mesh {
 const _vec3_1$1 = new t3d.Vector3();
 const _vec3_2$1 = new t3d.Vector3();
 const _vec4_1$1 = new t3d.Vector4();
+
+function copyToVector3ZUp(array, index, vector) {
+	vector.x = array[index];
+	vector.y = array[index + 2];
+	vector.z = array[index + 1];
+}
+
+class StarsGeometry extends t3d.Geometry {
+
+	setPoints(starsArray, { brightThreshold = 0.06225, brightMax = 0.8, zUp = false } = {}) {
+		const starsNumber = starsArray.length  / 6;
+
+		const positions = [];
+		const colors = [];
+
+		for (let i = 0; i < starsNumber; i++) {
+			zUp ? copyToVector3ZUp(starsArray, i * 6, _vec3_1$1) : _vec3_1$1.fromArray(starsArray, i * 6);
+
+			_vec3_2$1.fromArray(starsArray, i * 6 + 3);
+			let magnitude = _vec3_2$1.getLength(); // Using Vector3.getLength term to sort the brightness of star magnitude
+
+			if (magnitude < brightThreshold) continue;
+
+			if (magnitude > brightMax) { // clamp over bright stars
+				_vec3_2$1.multiplyScalar(brightMax / magnitude);
+				magnitude = brightMax;
+			}
+
+			_vec4_1$1.set(_vec3_2$1.x, _vec3_2$1.y, _vec3_2$1.z, magnitude);
+
+			positions.push(_vec3_1$1.x, _vec3_1$1.y, _vec3_1$1.z);
+			colors.push(_vec4_1$1.x, _vec4_1$1.y, _vec4_1$1.z, _vec4_1$1.w);
+		}
+
+		const positionAttribute = new t3d.Attribute(new t3d.Buffer(new Float32Array(positions), 3));
+		this.addAttribute('a_Position', positionAttribute);
+		const colorAttribute = new t3d.Attribute(new t3d.Buffer(new Float32Array(colors), 4));
+		this.addAttribute('a_Color', colorAttribute);
+
+		this.version++;
+
+		// We don't need to compute bounding box and sphere for stars.
+		// this.computeBoundingBox();
+		// this.computeBoundingSphere();
+	}
+
+}
 
 const SkyShader = {
 	name: 'sky_bg',

@@ -16,7 +16,7 @@
 		{
 			"imports": {
 				"t3d": "./libs/t3d/build/t3d.module.js",
-				"t3d/examples/jsm/": "./libs/t3d/examples/jsm/",
+				"t3d/addons/": "./libs/t3d/examples/jsm/",
 				"t3d-dynamic-sky": "../build/t3d.dynamicsky.module.js"
 			}
 		}
@@ -24,9 +24,11 @@
 
 	<script type="module">
 		import * as t3d from 't3d';
-		import { Clock } from 't3d/examples/jsm/Clock.js';
-		import { ForwardRenderer } from 't3d/examples/jsm/render/ForwardRenderer.js';
-		import { OrbitControls } from 't3d/examples/jsm/controls/OrbitControls.js';
+		import { AxisHelper } from 't3d/addons/objects/AxisHelper.js';
+		import { GridHelper } from 't3d/addons/objects/GridHelper.js';
+		import { Clock } from 't3d/addons/Clock.js';
+		import { ForwardRenderer } from 't3d/addons/render/ForwardRenderer.js';
+		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
 
 		import { Stars } from "t3d-dynamic-sky";
 
@@ -35,17 +37,23 @@
 		let width = window.innerWidth || 2;
 		let height = window.innerHeight || 2;
 
-		const container = document.createElement('div');
-		document.body.appendChild(container);
-
 		const canvas = document.createElement('canvas');
 		canvas.width = width;
 		canvas.height = height;
-		container.appendChild(canvas);
+		document.body.appendChild(canvas);
+
 		const forwardRenderer = new ForwardRenderer(canvas, { antialias: true, alpha: true });
 		forwardRenderer.setClearColor(0, 0, 0, 1);
 
 		const scene = new t3d.Scene();
+
+		const axis = new AxisHelper(2);
+		axis.material.depthTest = false;
+		axis.renderOrder = 1;
+		scene.add(axis);
+
+		const grid = new GridHelper(10, 10, 0xffffff, 0x888888);
+		scene.add(grid);
 
 		const camera = new t3d.Camera();
 		camera.setPerspective(70 / 180 * Math.PI, width / height, 0.1, 1000);
@@ -54,24 +62,30 @@
 
 		let stars;
 
-		fetch('./StarsData.bytes')
-			.then(res => res.blob())
-			.then(blob => {
-				const reader = new FileReader();
-				reader.readAsArrayBuffer(blob);
-				reader.onload = function(e) {
-					const bytesArray = new Float32Array(e.target.result);
+		fetch('./StarsData.bytes').then(res => res.arrayBuffer()).then(e => {
+			const bytesArray = new Float32Array(e);
 
-					stars = new Stars(bytesArray);
-					stars.material.uniforms._CameraFar = 1000;
-					scene.add(stars);
+			console.time('Create stars');
+			stars = new Stars(bytesArray);
+			console.timeEnd('Create stars');
+			stars.material.uniforms._CameraFar = 1000;
+			scene.add(stars);
 
-					const gui = new GUI();
+			const gui = new GUI();
 
-					gui.add(stars.material.uniforms, "_StarIntensity", 0, 50, 1).name("Star Intensity");
-					gui.add(stars.material.uniforms, "_StarSize", 0, 20, 0.01).name("Star Size");
-				}
+			gui.add(stars.material.uniforms, "_StarIntensity", 0, 80, 1).name("Star Intensity");
+			gui.add(stars.material.uniforms, "_HeightFalloff", 0.01, 2, 0.01).name("Height Falloff");
+			gui.add(stars.material.uniforms, "_StarSize", 0, 30, 0.01).name("Star Size");
+			// gui.add(stars.material.uniforms, "_RadiusFactor", 0.1, 1, 0.01).name("Radius Factor");
+
+			const cameraFolder = gui.addFolder('Camera').close();
+			cameraFolder.add({ fov: 70 }, 'fov', 10, 120).name("FOV").onChange((value) => {
+				camera.setPerspective(value / 180 * Math.PI, width / height, 0.1, 1000);
 			});
+
+			const debugFolder = gui.addFolder('Debug').close();
+			debugFolder.add(grid, 'visible').name("Grid");
+		});
 
 		const controller = new OrbitControls(camera, canvas);
 		controller.target.set(0, 0, -0.5);
@@ -83,11 +97,10 @@
 			controller.update();
 
 			const deltaTime = clock.getDelta();
-
 			if (stars) {
-				stars.material.uniforms._Time += deltaTime / 1000 * 500;
-				// stars.euler.y += deltaTime / 1000 * 50;
+				stars.material.uniforms._Time += deltaTime / 2;
 			}
+
 			forwardRenderer.render(scene, camera);
 		}
 		requestAnimationFrame(loop);

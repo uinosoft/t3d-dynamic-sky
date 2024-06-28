@@ -6,6 +6,7 @@ export const InscatterShader = {
 	uniforms: {
 		_Transmittance: null,
 		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
+		textureDepth: 0
 	},
 	vertexShader: `
         attribute vec3 a_Position;
@@ -23,6 +24,7 @@ export const InscatterShader = {
     `,
 	fragmentShader: `
         uniform sampler2D _Transmittance;
+        uniform float textureDepth;
 
         varying vec2 v_Uv;
 
@@ -167,21 +169,9 @@ export const InscatterShader = {
             vec4 dhdH;
             float mu, muS, nu, r;
         
-            vec2 coords = v_Uv; // range 0 ~ 1.
-
+            vec2 coords = vec2(v_Uv.x / 8. + mod(textureDepth, 8.) / 8. , v_Uv.y);
             vec3 uvLayer;
-
-            if (RES_R > 3.) {
-                // hard coded to split the depth to 4 layer
-                // Texture size = 256 x 512
-                uvLayer = coords.y > 0.75 ? vec3(coords.x, coords.y * RES_R - 3., 8.) : // 16. ? atmosphere level layer
-                    coords.y > 0.5 ? vec3(coords.x, coords.y * RES_R - 2., 4.) :
-                    coords.y > 0.25 ? vec3(coords.x, coords.y * RES_R - 1., 2.) :
-                                    vec3(coords.x, coords.y * RES_R, 0.); // ground level layer
-            } else {
-                // One layer only, Texture size is 256 x 128
-                uvLayer = vec3(coords, 1.); // 2. ?
-            } 
+            uvLayer = vec3(coords.x, coords.y , textureDepth/8.); // ground level layer
         
             GetLayer(uvLayer.z, r, dhdH); 
             GetMuMuSNu(uvLayer.xy, r, dhdH, mu, muS, nu); 

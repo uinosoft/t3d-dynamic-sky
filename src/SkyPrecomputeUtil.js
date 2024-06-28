@@ -39,7 +39,7 @@ export class SkyPrecomputeUtil {
 		transmittanceRT.texture.format = t3d.PIXEL_FORMAT.RGBA;
 		transmittanceRT.texture.generateMipmaps = false;
 
-		const inscatterRT = new t3d.RenderTarget2D(512, 512);
+		const inscatterRT = new t3d.RenderTarget3D(16, 16, 32);
 		inscatterRT.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
 		inscatterRT.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
 		inscatterRT.texture.type = type;
@@ -88,10 +88,14 @@ export class SkyPrecomputeUtil {
 	}
 
 	computeInscatter(renderer) {
-		renderer.setRenderTarget(this._inscatterRT);
-		renderer.setClearColor(0, 0, 0, 0);
-		renderer.clear(true, true, true);
-		this._inscatterPass.render(renderer);
+		for (let i = 0; i < 32; i++) {
+			this._inscatterRT.activeLayer = i;
+			this._inscatterPass.uniforms.textureDepth = i;
+			renderer.setRenderTarget(this._inscatterRT);
+			renderer.setClearColor(1 - i / 4, 0, 0, 0);
+			renderer.clear(true, true, true);
+			this._inscatterPass.render(renderer);
+		}
 	}
 
 	setBetaRayleighDensity(Wavelengths, SkyTint, AtmosphereThickness) {

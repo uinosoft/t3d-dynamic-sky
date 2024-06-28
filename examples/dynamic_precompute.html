@@ -25,7 +25,7 @@
 	<script type="module">
 		import * as t3d from 't3d';
 		import { OrbitControls } from 't3d/examples/jsm/controls/OrbitControls.js';
-
+		import { Texture2DLoader } from 't3d/examples/jsm/loaders/Texture2DLoader.js';
 		import { SkyPrecomputeUtil } from "t3d-dynamic-sky";
 
 		let width = window.innerWidth || 2;
@@ -46,13 +46,10 @@
 		const backRenderTarget = new t3d.RenderTargetBack(canvas);
 
 		const capabilities = renderer.capabilities;
-		
+
 		const skyPrecomputeUtil = new SkyPrecomputeUtil(capabilities);
 		skyPrecomputeUtil.computeTransmittance(renderer);
 		skyPrecomputeUtil.computeInscatter(renderer);
-
-		// console.log(skyPrecomputeUtil.setBetaRayleighDensity(new t3d.Vector3(680, 550, 440), new t3d.Vector3(128 / 255, 128 / 255, 128 / 255, 255 / 255), 1.0));
-		// [0.05952087360787257, 0.05952087360787257, 0.05952087360787257, 1];
 
 		const scene = new t3d.Scene();
 
@@ -70,11 +67,61 @@
 		plane1.position.set(-1, 0, 0);
 		scene.add(plane1);
 
-		const material2 = new t3d.BasicMaterial();
-		material2.diffuseMap = skyPrecomputeUtil.inscatterTexture;
-		material2.side = t3d.DRAW_SIDE.DOUBLE;
+		const VolumeShader = {
+			name: 'volume',
+
+			defines: {},
+
+			uniforms: {
+				densityTexture: null,
+			},
+
+			vertexShader: `
+			attribute vec3 a_Position;
+			attribute vec2 a_Uv;
+
+			uniform mat4 u_ProjectionView;
+			uniform mat4 u_Model;
+
+			varying vec2 v_Uv;
+
+			void main() {
+				v_Uv = a_Uv;
+				gl_Position = u_ProjectionView * u_Model * vec4(a_Position, 1.0);
+			}
+			`,
+
+			fragmentShader: `
+			precision highp sampler3D;
+			varying vec2 v_Uv;
+
+			uniform sampler3D densityTexture;
+
+			float xNumber = 8.;
+			float yNumber = 4.;
+
+			void main() {
+			vec3 uvLayer;
+			vec2 coords = v_Uv;
+			uvLayer = vec3(mod(coords.x * xNumber, 1.), mod(coords.y * yNumber,1.) ,coords.x * xNumber * coords.y * yNumber);
+			
+			vec4 color = texture(densityTexture, uvLayer);
+			gl_FragColor = vec4(color.rgb , 1.0);
+			}
+		`
+		};
+
+
+		const shaderMaterial = new t3d.ShaderMaterial(VolumeShader);
+		shaderMaterial.transparent = true;
+		shaderMaterial.premultipliedAlpha = true;
+		
+		shaderMaterial.uniforms.densityTexture = skyPrecomputeUtil.inscatterTexture;
+
+		shaderMaterial.uniforms.platteTexture = new Texture2DLoader().load('./textures/platte.png');
+		new t3d.Matrix4().toArray(shaderMaterial.uniforms.uInvTransform);
 		const geometry2 = new t3d.PlaneGeometry(2, 2);
-		const plane2 = new t3d.Mesh(geometry2, material2);
+		const plane2 = new t3d.Mesh(geometry2, shaderMaterial);
 		plane2.euler.x = Math.PI / 2;
 		plane2.position.set(1, 0, 0);
 		scene.add(plane2);

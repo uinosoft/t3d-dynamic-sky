@@ -492,11 +492,12 @@
 				}
 		`,
 		fragmentShader: `
+			precision highp sampler3D;
 				uniform vec4 _SunDirSize;
 
 				uniform float _SkyboxOcean;
 
-				uniform sampler2D _Inscatter;
+				uniform sampler3D _Inscatter;
 				uniform sampler2D _Transmittance;
 
 				uniform vec4 _NightHorizonColor;
@@ -530,7 +531,7 @@
 				const float RES_R = 4.; 	// 3D texture depth
 				const float RES_MU = 128.; 	// height of the texture
 				const float RES_MU_S = 32.; // width per table
-				const float RES_NU = 8.;	// table per texture depth
+				const float RES_NU = 1.;	// table per texture depth
 
 				#define TRANSMITTANCE_NON_LINEAR	
 				#define INSCATTER_NON_LINEAR
@@ -542,7 +543,7 @@
 						}
 				#endif
 
-				vec4 Texture4D(sampler2D table, float r, float mu, float muS, float nu) {
+				vec4 Texture4D(sampler3D table, float r, float mu, float muS, float nu) {
 						float H = sqrt(Rt * Rt - Rg * Rg);
 						float rho = sqrt(r * r - Rg * Rg);
 						#ifdef INSCATTER_NON_LINEAR
@@ -570,36 +571,36 @@
 						lep = lep - uNu;
 
 						// Original 3D lookup
-						// return tex3D(table, float3((uNu + uMuS) / RES_NU, uMu, uR)) * (1.0 - lep) + tex3D(table, float3((uNu + uMuS + 1.0) / RES_NU, uMu, uR)) * lep;
+						return texture(table, vec3((uNu + uMuS) / RES_NU, uMu, uR));
 
 						float uNu_uMuS = uNu + uMuS;
 
-						#ifdef SKY_MULTISAMPLE	
-								// new 2D lookup
-								float u_0 = floor(uR * RES_R) / RES_R;
-								float u_1 = floor(uR * RES_R + 1.0) / RES_R;
-								float u_frac = fract(uR * RES_R);
+						// #ifdef SKY_MULTISAMPLE	
+						//		 // new 2D lookup
+						//		 float u_0 = floor(uR * RES_R) / RES_R;
+						//		 float u_1 = floor(uR * RES_R + 1.0) / RES_R;
+						//		 float u_frac = fract(uR * RES_R);
 
-								// pre-calculate uv
-								float uv_0X = uNu_uMuS / RES_NU;
-								float uv_1X = (uNu_uMuS + 1.0) / RES_NU;
-								float uv_0Y = uMu / RES_R + u_0;
-								float uv_1Y = uMu / RES_R + u_1;
-								float OneMinusLep = 1.0 - lep;
+						//		 // pre-calculate uv
+						//		 float uv_0X = uNu_uMuS / RES_NU;
+						//		 float uv_1X = (uNu_uMuS + 1.0) / RES_NU;
+						//		 float uv_0Y = uMu / RES_R + u_0;
+						//		 float uv_1Y = uMu / RES_R + u_1;
+						//		 float OneMinusLep = 1.0 - lep;
 
-								#ifdef FIX_INSCATTER_SAMPLE
-										uv_0X = fixU(uv_0X);
-										uv_1X = fixU(uv_1X);
-								#endif
+						//		 #ifdef FIX_INSCATTER_SAMPLE
+						//				 uv_0X = fixU(uv_0X);
+						//				 uv_1X = fixU(uv_1X);
+						//		 #endif
 
-								vec4 A = texture2D(table, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_0Y)) * lep;	
-								vec4 B = texture2D(table, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_1Y)) * lep;	
+						//		 vec4 A = texture2D(table, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_0Y)) * lep;	
+						//		 vec4 B = texture2D(table, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_1Y)) * lep;	
 
-								return A * (1.0 - u_frac) + B * u_frac;
+						//		 return A * (1.0 - u_frac) + B * u_frac;
 
-						#else	
-								return texture2D(table, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(table, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
-						#endif
+						// #else	
+						//		 return texture2D(table, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(table, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
+						// #endif
 				}
 
 				vec3 GetMie(vec4 rayMie) {	
@@ -898,7 +899,8 @@ float Limit(float r, float mu) {
 		defines: {},
 		uniforms: {
 			_Transmittance: null,
-			betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1]
+			betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
+			textureDepth: 0
 		},
 		vertexShader: `
 				attribute vec3 a_Position;
@@ -916,6 +918,7 @@ float Limit(float r, float mu) {
 		`,
 		fragmentShader: `
 				uniform sampler2D _Transmittance;
+				uniform float textureDepth;
 
 				varying vec2 v_Uv;
 
@@ -1060,21 +1063,9 @@ float Limit(float r, float mu) {
 						vec4 dhdH;
 						float mu, muS, nu, r;
 				
-						vec2 coords = v_Uv; // range 0 ~ 1.
-
+						vec2 coords = vec2(v_Uv.x / 8. + mod(textureDepth, 8.) / 8. , v_Uv.y);
 						vec3 uvLayer;
-
-						if (RES_R > 3.) {
-								// hard coded to split the depth to 4 layer
-								// Texture size = 256 x 512
-								uvLayer = coords.y > 0.75 ? vec3(coords.x, coords.y * RES_R - 3., 8.) : // 16. ? atmosphere level layer
-										coords.y > 0.5 ? vec3(coords.x, coords.y * RES_R - 2., 4.) :
-										coords.y > 0.25 ? vec3(coords.x, coords.y * RES_R - 1., 2.) :
-																		vec3(coords.x, coords.y * RES_R, 0.); // ground level layer
-						} else {
-								// One layer only, Texture size is 256 x 128
-								uvLayer = vec3(coords, 1.); // 2. ?
-						} 
+						uvLayer = vec3(coords.x, coords.y , textureDepth/8.); // ground level layer
 				
 						GetLayer(uvLayer.z, r, dhdH); 
 						GetMuMuSNu(uvLayer.xy, r, dhdH, mu, muS, nu); 
@@ -1137,7 +1128,7 @@ float Limit(float r, float mu) {
 			transmittanceRT.texture.type = type;
 			transmittanceRT.texture.format = t3d__namespace.PIXEL_FORMAT.RGBA;
 			transmittanceRT.texture.generateMipmaps = false;
-			const inscatterRT = new t3d__namespace.RenderTarget2D(512, 512);
+			const inscatterRT = new t3d__namespace.RenderTarget3D(16, 16, 32);
 			inscatterRT.texture.minFilter = t3d__namespace.TEXTURE_FILTER.LINEAR;
 			inscatterRT.texture.magFilter = t3d__namespace.TEXTURE_FILTER.LINEAR;
 			inscatterRT.texture.type = type;
@@ -1178,10 +1169,14 @@ float Limit(float r, float mu) {
 			this._transmittancePass.render(renderer);
 		}
 		computeInscatter(renderer) {
-			renderer.setRenderTarget(this._inscatterRT);
-			renderer.setClearColor(0, 0, 0, 0);
-			renderer.clear(true, true, true);
-			this._inscatterPass.render(renderer);
+			for (let i = 0; i < 32; i++) {
+				this._inscatterRT.activeLayer = i;
+				this._inscatterPass.uniforms.textureDepth = i;
+				renderer.setRenderTarget(this._inscatterRT);
+				renderer.setClearColor(1 - i / 4, 0, 0, 0);
+				renderer.clear(true, true, true);
+				this._inscatterPass.render(renderer);
+			}
 		}
 		setBetaRayleighDensity(Wavelengths, SkyTint, AtmosphereThickness) {
 			// Sky Tint shifts the value of Wavelengths

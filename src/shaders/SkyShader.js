@@ -110,11 +110,12 @@ export const SkyShader = {
         }
     `,
 	fragmentShader: `
+    	precision highp sampler3D;
         uniform vec4 _SunDirSize;
 
         uniform float _SkyboxOcean;
 
-        uniform sampler2D _Inscatter;
+        uniform sampler3D _Inscatter;
         uniform sampler2D _Transmittance;
 
         uniform vec4 _NightHorizonColor;
@@ -148,7 +149,7 @@ export const SkyShader = {
         const float RES_R = 4.; 	// 3D texture depth
         const float RES_MU = 128.; 	// height of the texture
         const float RES_MU_S = 32.; // width per table
-        const float RES_NU = 8.;	// table per texture depth
+        const float RES_NU = 1.;	// table per texture depth
 
         #define TRANSMITTANCE_NON_LINEAR	
         #define INSCATTER_NON_LINEAR
@@ -160,7 +161,7 @@ export const SkyShader = {
             }
         #endif
 
-        vec4 Texture4D(sampler2D table, float r, float mu, float muS, float nu) {
+        vec4 Texture4D(sampler3D table, float r, float mu, float muS, float nu) {
             float H = sqrt(Rt * Rt - Rg * Rg);
             float rho = sqrt(r * r - Rg * Rg);
             #ifdef INSCATTER_NON_LINEAR
@@ -188,36 +189,36 @@ export const SkyShader = {
             lep = lep - uNu;
 
             // Original 3D lookup
-            // return tex3D(table, float3((uNu + uMuS) / RES_NU, uMu, uR)) * (1.0 - lep) + tex3D(table, float3((uNu + uMuS + 1.0) / RES_NU, uMu, uR)) * lep;
+            return texture(table, vec3((uNu + uMuS) / RES_NU, uMu, uR));
 
             float uNu_uMuS = uNu + uMuS;
 
-            #ifdef SKY_MULTISAMPLE  
-                // new 2D lookup
-                float u_0 = floor(uR * RES_R) / RES_R;
-                float u_1 = floor(uR * RES_R + 1.0) / RES_R;
-                float u_frac = fract(uR * RES_R);
+            // #ifdef SKY_MULTISAMPLE  
+            //     // new 2D lookup
+            //     float u_0 = floor(uR * RES_R) / RES_R;
+            //     float u_1 = floor(uR * RES_R + 1.0) / RES_R;
+            //     float u_frac = fract(uR * RES_R);
 
-                // pre-calculate uv
-                float uv_0X = uNu_uMuS / RES_NU;
-                float uv_1X = (uNu_uMuS + 1.0) / RES_NU;
-                float uv_0Y = uMu / RES_R + u_0;
-                float uv_1Y = uMu / RES_R + u_1;
-                float OneMinusLep = 1.0 - lep;
+            //     // pre-calculate uv
+            //     float uv_0X = uNu_uMuS / RES_NU;
+            //     float uv_1X = (uNu_uMuS + 1.0) / RES_NU;
+            //     float uv_0Y = uMu / RES_R + u_0;
+            //     float uv_1Y = uMu / RES_R + u_1;
+            //     float OneMinusLep = 1.0 - lep;
 
-                #ifdef FIX_INSCATTER_SAMPLE
-                    uv_0X = fixU(uv_0X);
-                    uv_1X = fixU(uv_1X);
-                #endif
+            //     #ifdef FIX_INSCATTER_SAMPLE
+            //         uv_0X = fixU(uv_0X);
+            //         uv_1X = fixU(uv_1X);
+            //     #endif
 
-                vec4 A = texture2D(table, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_0Y)) * lep;	
-                vec4 B = texture2D(table, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_1Y)) * lep;	
+            //     vec4 A = texture2D(table, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_0Y)) * lep;	
+            //     vec4 B = texture2D(table, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_1Y)) * lep;	
 
-                return A * (1.0 - u_frac) + B * u_frac;
+            //     return A * (1.0 - u_frac) + B * u_frac;
 
-            #else	
-                return texture2D(table, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(table, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
-            #endif
+            // #else	
+            //     return texture2D(table, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(table, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
+            // #endif
         }
 
         vec3 GetMie(vec4 rayMie) {	

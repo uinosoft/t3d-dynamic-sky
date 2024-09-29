@@ -1,6 +1,6 @@
 {
   "name": "t3d-dynamic-sky",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dynamic sky addon for t3d.",
   "type": "module",
   "main": "./build/t3d.dynamicsky.js",

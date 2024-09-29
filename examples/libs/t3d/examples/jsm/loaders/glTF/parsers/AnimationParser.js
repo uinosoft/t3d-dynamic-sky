@@ -2,10 +2,15 @@ import {
 	QuaternionKeyframeTrack,
 	NumberKeyframeTrack,
 	VectorKeyframeTrack,
-	KeyframeClip
+	KeyframeClip,
+	StepInterpolant,
+	LinearInterpolant,
+	CubicSplineInterpolant,
+	QuaternionLinearInterpolant,
+	QuaternionCubicSplineInterpolant
 } from 't3d';
-import { GLTFUtils } from "../GLTFUtils.js";
-import { PATH_PROPERTIES } from "../Constants.js";
+import { GLTFUtils } from '../GLTFUtils.js';
+import { PATH_PROPERTIES } from '../Constants.js';
 
 export class AnimationParser {
 
@@ -58,10 +63,10 @@ export class AnimationParser {
 					}
 
 					const input = new inputAccessor.buffer.array.constructor(inputAccessor.buffer.array);
-					const output = new outputAccessor.buffer.array.constructor(outputAccessor.buffer.array);
+					const output = new Float32Array(outputAccessor.buffer.array);
 
 					if (outputAccessor.normalized) {
-						const scale = GLTFUtils.getNormalizedComponentScale(output.constructor);
+						const scale = GLTFUtils.getNormalizedComponentScale(outputAccessor.buffer.array.constructor);
 						for (let j = 0, jl = output.length; j < jl; j++) {
 							output[j] *= scale;
 						}
@@ -80,8 +85,8 @@ export class AnimationParser {
 					}
 
 					for (let j = 0, jl = targetNodes.length; j < jl; j++) {
-						// TODO interpolation
-						const track = new TypedKeyframeTrack(targetNodes[j], PATH_PROPERTIES[target.path], input, output);
+						const interpolant = getInterpolant(gltfSampler.interpolation, TypedKeyframeTrack === QuaternionKeyframeTrack);
+						const track = new TypedKeyframeTrack(targetNodes[j], PATH_PROPERTIES[target.path], input, output, interpolant);
 						tracks.push(track);
 					}
 
@@ -98,4 +103,16 @@ export class AnimationParser {
 		context.animations = animationClips;
 	}
 
+}
+
+function getInterpolant(type, quaternion) {
+	switch (type) {
+		case 'STEP':
+			return StepInterpolant;
+		case 'CUBICSPLINE':
+			return quaternion ? QuaternionCubicSplineInterpolant : CubicSplineInterpolant;
+		case 'LINEAR':
+		default:
+			return quaternion ? QuaternionLinearInterpolant : LinearInterpolant;
+	}
 }

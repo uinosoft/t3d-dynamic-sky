@@ -1,5 +1,4 @@
 import { GLTFUtils } from '../GLTFUtils.js';
-import { KHR_texture_basisu as _KHR_texture_basisu } from '../extensions/KHR_texture_basisu.js';
 
 export class ImageParser {
 
@@ -7,6 +6,8 @@ export class ImageParser {
 		const { gltf, bufferViews, path, loadItems } = context;
 
 		if (!gltf.images) return;
+
+		const basisuExt = loader.extensions.get('KHR_texture_basisu');
 
 		return Promise.all(
 			gltf.images.map((params, index) => {
@@ -26,8 +27,8 @@ export class ImageParser {
 					loadItems.delete(imageUrl);
 				}
 				let promise;
-				if (mimeType && mimeType.includes('ktx2')) {
-					promise = _KHR_texture_basisu.loadTextureData(imageUrl, loader.getKTX2Loader()).then(transcodeResult => {
+				if (mimeType && mimeType.includes('ktx2') && basisuExt) {
+					promise = basisuExt.loadTextureData(imageUrl, loader.getKTX2Loader()).then(transcodeResult => {
 						if (loader.detailLoadProgress) {
 							if (isObjectURL) {
 								loader.manager.itemEnd(GLTFUtils.resolveURL('blob<' + index + '>', path));
@@ -40,7 +41,7 @@ export class ImageParser {
 				} else {
 					const param = { loader, imageUrl, imageName, isObjectURL, sourceUrl, index, path };
 					if (mimeType && (mimeType.includes('avif') || mimeType.includes('webp'))) {
-						promise = detectSupport(mimeType).then((isSupported) => {
+						promise = detectSupport(mimeType).then(isSupported => {
 							if (isSupported) return loadImage(param);
 							throw new Error('GLTFLoader: WebP or AVIF required by asset but unsupported.');
 						});
@@ -61,7 +62,7 @@ export class ImageParser {
 }
 
 function detectSupport(mimeType) {
-	const isSupported = new Promise((resolve) => {
+	const isSupported = new Promise(resolve => {
 		// Lossy test image.
 		const image = new Image();
 		if (mimeType.includes('avif')) {

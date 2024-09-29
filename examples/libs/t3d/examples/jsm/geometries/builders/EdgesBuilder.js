@@ -1,34 +1,40 @@
 /**
- * EdgesBuilder
+ * EdgesBuilder is a helper for building edges geometry from given triangles data.
  */
-var EdgesBuilder = {
+const EdgesBuilder = {
 
 	/**
-	 * @param {Array} positions - Flat array of positions.
-	 * @param {Array} [indices=] - Flat array of indices.
-     * @param {Object} [options={}]
+	 * @param {Array} bufferArray - Flat buffer array containing vertex positions.
+	 * @param {Array} [indices=] - Flat buffer array of indices, must be multiple of 3.
+     * @param {Object} [options={}] - The options object.
 	 * @param {Number} [options.thresholdAngle=1] - An edge is only rendered if the angle (in degrees) between the face normals of the adjoining faces exceeds this value.
-	 * @return {Object} - The geometry data.
+	 * @param {Number} [options.stride=3] - The number of values of the array that should be associated with a particular vertex.
+	 * @param {Number} [options.offset=0] - The offset in the buffer array where the position starts.
+	 * @return {Object} - The edges geometry data.
 	 */
-	getGeometryData: function(positions, indices, options = {}) {
+	getGeometryData: function(bufferArray, indices, options = {}) {
 		const thresholdAngle = options.thresholdAngle !== undefined ? options.thresholdAngle : 1;
+		const stride = options.stride !== undefined ? options.stride : 3;
+		const offset = options.offset !== undefined ? options.offset : 0;
 
-		let i, j, l, key, face, result = [];
+		let i, j, l, key, face;
+		const result = [];
 
 		/** merge vertices */
 
-		let verticesMap = {};
-		let unique = [], changes = [];
+		const verticesMap = {};
+		const unique = [], changes = [];
 
-		let precisionPoints = 4; // number of decimal points, e.g. 4 for epsilon of 0.0001
-		let precision = Math.pow(10, precisionPoints);
+		const precisionPoints = 4; // number of decimal points, e.g. 4 for epsilon of 0.0001
+		const precision = Math.pow(10, precisionPoints);
 
-		let x, y, z;
-		l = positions.length / 3;
+		let offsetIndex, x, y, z;
+		l = bufferArray.length / stride;
 		for (i = 0; i < l; i++) {
-			x = positions[i * 3 + 0];
-			y = positions[i * 3 + 1];
-			z = positions[i * 3 + 2];
+			offsetIndex = i * stride + offset;
+			x = bufferArray[offsetIndex + 0];
+			y = bufferArray[offsetIndex + 1];
+			z = bufferArray[offsetIndex + 2];
 
 			key = Math.round(x * precision) + '_' + Math.round(y * precision) + '_' + Math.round(z * precision);
 
@@ -43,7 +49,7 @@ var EdgesBuilder = {
 
 		/** get faces  (vertices and normal) */
 
-		let faces = [];
+		const faces = [];
 
 		if (indices) {
 			l = indices.length / 3;
@@ -69,7 +75,8 @@ var EdgesBuilder = {
 		/**
          * get edges { index1: edge[ 0 ], index2: edge[ 1 ], face1: i, face2: undefined }
          */
-		let edge1, edge2, edge = [0, 0], edges = {};
+		let edge1, edge2;
+		const edge = [0, 0], edges = {};
 		for (i = 0, l = faces.length; i < l; i++) {
 			face = faces[i];
 			for (j = 0; j < 3; j++) {
@@ -89,9 +96,9 @@ var EdgesBuilder = {
 		}
 
 		/** edges filter */
-		let thresholdDot = Math.cos(DEG2RAD * thresholdAngle);
+		const thresholdDot = Math.cos(DEG2RAD * thresholdAngle);
 		for (key in edges) {
-			let e = edges[key];
+			const e = edges[key];
 			// an edge is only rendered if the angle (in degrees) between the face normals of the adjoining faces exceeds this value. default = 1 degree.
 			if (e.face2 === undefined || dot(faces[e.face1].n, faces[e.face2].n) <= thresholdDot) {
 				result.push(
@@ -100,7 +107,7 @@ var EdgesBuilder = {
 					unique[e.index1 * 3 + 2],
 					unique[e.index2 * 3 + 0],
 					unique[e.index2 * 3 + 1],
-					unique[e.index2 * 3 + 2],
+					unique[e.index2 * 3 + 2]
 				);
 			}
 		}
@@ -118,31 +125,31 @@ function dot(v1, v2) {
 }
 
 function computeFaceNormal(face, buffer) {
-	let vAX = buffer[face.i[0] * 3 + 0];
-	let vAY = buffer[face.i[0] * 3 + 1];
-	let vAZ = buffer[face.i[0] * 3 + 2];
+	const vAX = buffer[face.i[0] * 3 + 0];
+	const vAY = buffer[face.i[0] * 3 + 1];
+	const vAZ = buffer[face.i[0] * 3 + 2];
 
-	let vBX = buffer[face.i[1] * 3 + 0];
-	let vBY = buffer[face.i[1] * 3 + 1];
-	let vBZ = buffer[face.i[1] * 3 + 2];
+	const vBX = buffer[face.i[1] * 3 + 0];
+	const vBY = buffer[face.i[1] * 3 + 1];
+	const vBZ = buffer[face.i[1] * 3 + 2];
 
-	let vCX = buffer[face.i[2] * 3 + 0];
-	let vCY = buffer[face.i[2] * 3 + 1];
-	let vCZ = buffer[face.i[2] * 3 + 2];
+	const vCX = buffer[face.i[2] * 3 + 0];
+	const vCY = buffer[face.i[2] * 3 + 1];
+	const vCZ = buffer[face.i[2] * 3 + 2];
 
-	let cbX = vCX - vBX; // ax
-	let cbY = vCY - vBY; // ay
-	let cbZ = vCZ - vBZ; // az
+	const cbX = vCX - vBX; // ax
+	const cbY = vCY - vBY; // ay
+	const cbZ = vCZ - vBZ; // az
 
-	let abX = vAX - vBX; // bx
-	let abY = vAY - vBY; // by
-	let abZ = vAZ - vBZ; // bz
+	const abX = vAX - vBX; // bx
+	const abY = vAY - vBY; // by
+	const abZ = vAZ - vBZ; // bz
 
 	let nX = cbY * abZ - cbZ * abY;
 	let nY = cbZ * abX - cbX * abZ;
 	let nZ = cbX * abY - cbY * abX;
 
-	let nLen = Math.sqrt(nX * nX + nY * nY + nZ * nZ);
+	const nLen = Math.sqrt(nX * nX + nY * nY + nZ * nZ);
 
 	nX /= nLen;
 	nY /= nLen;

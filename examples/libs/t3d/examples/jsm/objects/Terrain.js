@@ -55,7 +55,7 @@ class Terrain extends Mesh {
 			}
 		}
 
-		this.geometry.getAttribute("a_Position").buffer.version++;
+		this.geometry.getAttribute('a_Position').buffer.version++;
 		this.geometry.computeBoundingBox();
 		this.geometry.computeBoundingSphere();
 	}
@@ -174,6 +174,7 @@ const terrainShader = {
 		#include <uv_pars_frag>
 		#include <color_pars_frag>
 		#include <diffuseMap_pars_frag>
+		#include <alphaTest_pars_frag>
 		#include <normalMap_pars_frag>
 		#include <bumpMap_pars_frag>
 		#include <light_pars_frag>
@@ -218,6 +219,6 @@ const terrainShader = {
 			#include <dithering_frag>
 		}
 	`
-}
+};
 
-export { Terrain }
+export { Terrain };

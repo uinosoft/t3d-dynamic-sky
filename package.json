@@ -52,7 +52,7 @@
     "rollup": "^3.20.2"
   },
   "peerDependencies": {
-    "t3d": "^0.2.0"
+    "t3d": ">=0.2.0 <0.4.0"
   },
   "scripts": {
     "build": "rollup -c",

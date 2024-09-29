@@ -1,5 +1,5 @@
 import * as t3d from 't3d';
-import { StarsShader } from "./shaders/StarsShader.js";
+import { StarsShader } from './shaders/StarsShader.js';
 
 /**
  * Stars is a mesh that represents the stars in the sky.
@@ -55,7 +55,7 @@ function copyToVector3ZUp(array, index, vector) {
 class StarsGeometry extends t3d.Geometry {
 
 	setPoints(starsArray, { brightThreshold = 0.06225, brightMax = 0.8, zUp = false } = {}) {
-		const starsNumber = starsArray.length  / 6;
+		const starsNumber = starsArray.length / 6;
 
 		const positions = [];
 		const colors = [];

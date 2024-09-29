@@ -30,7 +30,7 @@
 		import { ForwardRenderer } from 't3d/addons/render/ForwardRenderer.js';
 		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
 
-		import { Stars } from "t3d-dynamic-sky";
+		import { Stars } from 't3d-dynamic-sky';
 
 		import { GUI } from './libs/lil-gui.esm.min.js';
 
@@ -57,7 +57,7 @@
 
 		const camera = new t3d.Camera();
 		camera.setPerspective(70 / 180 * Math.PI, width / height, 0.1, 1000);
-		camera.position.set(0, 1, 5)
+		camera.position.set(0, 1, 5);
 		scene.add(camera);
 
 		let stars;
@@ -73,18 +73,18 @@
 
 			const gui = new GUI();
 
-			gui.add(stars.material.uniforms, "_StarIntensity", 0, 80, 1).name("Star Intensity");
-			gui.add(stars.material.uniforms, "_HeightFalloff", 0.01, 2, 0.01).name("Height Falloff");
-			gui.add(stars.material.uniforms, "_StarSize", 0, 30, 0.01).name("Star Size");
+			gui.add(stars.material.uniforms, '_StarIntensity', 0, 80, 1).name('Star Intensity');
+			gui.add(stars.material.uniforms, '_HeightFalloff', 0.01, 2, 0.01).name('Height Falloff');
+			gui.add(stars.material.uniforms, '_StarSize', 0, 30, 0.01).name('Star Size');
 			// gui.add(stars.material.uniforms, "_RadiusFactor", 0.1, 1, 0.01).name("Radius Factor");
 
 			const cameraFolder = gui.addFolder('Camera').close();
-			cameraFolder.add({ fov: 70 }, 'fov', 10, 120).name("FOV").onChange((value) => {
+			cameraFolder.add({ fov: 70 }, 'fov', 10, 120).name('FOV').onChange(value => {
 				camera.setPerspective(value / 180 * Math.PI, width / height, 0.1, 1000);
 			});
 
 			const debugFolder = gui.addFolder('Debug').close();
-			debugFolder.add(grid, 'visible').name("Grid");
+			debugFolder.add(grid, 'visible').name('Grid');
 		});
 
 		const controller = new OrbitControls(camera, canvas);
@@ -113,7 +113,7 @@
 
 			forwardRenderer.backRenderTarget.resize(width, height);
 		}
-		window.addEventListener("resize", onWindowResize, false);
+		window.addEventListener('resize', onWindowResize, false);
 	</script>
 </body>
 </html>

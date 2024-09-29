@@ -29,7 +29,7 @@
 		import { Texture2DLoader } from 't3d/examples/jsm/loaders/Texture2DLoader.js';
 		import { TextureCubeLoader } from 't3d/examples/jsm/loaders/TextureCubeLoader.js';
 
-		import { Clouds } from "t3d-dynamic-sky";
+		import { Clouds } from 't3d-dynamic-sky';
 
 		import { GUI } from './libs/lil-gui.esm.min.js';
 
@@ -46,8 +46,8 @@
 		const context = skyCanvas.getContext('2d');
 
 		const gradient = context.createLinearGradient(0, 0, 0, skyCanvas.height);
-		gradient.addColorStop(0, "#1e4877");
-		gradient.addColorStop(0.5, "#4584b4")
+		gradient.addColorStop(0, '#1e4877');
+		gradient.addColorStop(0.5, '#4584b4');
 
 		context.fillStyle = gradient;
 		context.fillRect(0, 0, skyCanvas.width, skyCanvas.height);
@@ -65,18 +65,18 @@
 		scene.environmentLightIntensity = 0.8;
 
 		const cube_texture = new TextureCubeLoader().load([
-			"./textures/cube/BlueSky/posx.jpg",
-			"./textures/cube/BlueSky/negx.jpg",
-			"./textures/cube/BlueSky/posy.jpg",
-			"./textures/cube/BlueSky/negy.jpg",
-			"./textures/cube/BlueSky/posz.jpg",
-			"./textures/cube/BlueSky/negz.jpg"
+			'./textures/cube/BlueSky/posx.jpg',
+			'./textures/cube/BlueSky/negx.jpg',
+			'./textures/cube/BlueSky/posy.jpg',
+			'./textures/cube/BlueSky/negy.jpg',
+			'./textures/cube/BlueSky/posz.jpg',
+			'./textures/cube/BlueSky/negz.jpg'
 		]);
 		scene.environment = cube_texture;
 
 		const camera = new t3d.Camera();
 		camera.setPerspective(70 / 180 * Math.PI, width / height, 0.01, 1000);
-		camera.position.set(0, 1, 5)
+		camera.position.set(0, 1, 5);
 		scene.add(camera);
 
 		const sphere_geometry = new t3d.SphereGeometry(0.5, 20, 20);
@@ -107,7 +107,7 @@
 		const clouds = new Clouds();
 		scene.add(clouds);
 
-		const texture = new Texture2DLoader().load("./textures/Sample_Rectangular_2048.jpg");
+		const texture = new Texture2DLoader().load('./textures/Sample_Rectangular_2048.jpg');
 		texture.anisotropy = 16;
 		texture.wrapS = texture.wrapT = t3d.TEXTURE_WRAP.REPEAT;
 
@@ -153,25 +153,25 @@
 
 		const gui = new GUI();
 
-		gui.add(material.uniforms, "_HeightOffset", -20, 20, 1).name("Height Offset");
-		gui.add(material.uniforms, "_StepSize", 0.001, 0.02, 0.001).name("Step size");
+		gui.add(material.uniforms, '_HeightOffset', -20, 20, 1).name('Height Offset');
+		gui.add(material.uniforms, '_StepSize', 0.001, 0.02, 0.001).name('Step size');
 
-		gui.add(material.uniforms, "_Attenuation", 0, 5, 0.01).name("Attenuation");
-		gui.add(material.uniforms, "_AlphaSaturation", 1, 10, 0.01).name("Alpha Saturation");
-		gui.add(material.uniforms, "_Mask", 0, 4, 0.01).name("Clouds Density");
+		gui.add(material.uniforms, '_Attenuation', 0, 5, 0.01).name('Attenuation');
+		gui.add(material.uniforms, '_AlphaSaturation', 1, 10, 0.01).name('Alpha Saturation');
+		gui.add(material.uniforms, '_Mask', 0, 4, 0.01).name('Clouds Density');
 
-		gui.addColor(material.uniforms, "_NightZenithColor").name("Night Zenith Color");
-		gui.addColor(material.uniforms, "_SkyColor").name("Sky Color");
-		gui.addColor(material.uniforms, "_SkyLightColor").name("Sky Light Color");
+		gui.addColor(material.uniforms, '_NightZenithColor').name('Night Zenith Color');
+		gui.addColor(material.uniforms, '_SkyColor').name('Sky Color');
+		gui.addColor(material.uniforms, '_SkyLightColor').name('Sky Light Color');
 
-		gui.add(material.uniforms, "_LightColorMultiplier", 0, 10, 0.01).name("Light Color Multiplier");
-		gui.add(material.uniforms, "_SkyColorMultiplier", 0, 10, 0.01).name("Sky Color Multiplier");
+		gui.add(material.uniforms, '_LightColorMultiplier', 0, 10, 0.01).name('Light Color Multiplier');
+		gui.add(material.uniforms, '_SkyColorMultiplier', 0, 10, 0.01).name('Sky Color Multiplier');
 
-		gui.add(material.uniforms, "_SkyMieG", 0, 2, 0.01).name("SkyMieG");
-		gui.add(material.uniforms, "_ScatterMultiplier", 0, 10, 0.01).name("Scatter Multiplier");
+		gui.add(material.uniforms, '_SkyMieG', 0, 2, 0.01).name('SkyMieG');
+		gui.add(material.uniforms, '_ScatterMultiplier', 0, 10, 0.01).name('Scatter Multiplier');
 
-		gui.add(material.uniforms._uSkyNightParams, 0, 0, 1, 0.01).name("Night Param0");
-		gui.add(material.uniforms._uSkyNightParams, 1, 0, 1, 0.01).name("Night Param1");
+		gui.add(material.uniforms._uSkyNightParams, 0, 0, 1, 0.01).name('Night Param0');
+		gui.add(material.uniforms._uSkyNightParams, 1, 0, 1, 0.01).name('Night Param1');
 		
 		gui.add(spherical, 'phi', 0, Math.PI).onChange(setSunAndMoonDir);
 		gui.add(spherical, 'theta', 0, Math.PI * 2).onChange(setSunAndMoonDir);
@@ -192,7 +192,7 @@
 
 			forwardRenderer.backRenderTarget.resize(width, height);
 		}
-		window.addEventListener("resize", onWindowResize, false);
+		window.addEventListener('resize', onWindowResize, false);
 	</script>
 </body>
 </html>

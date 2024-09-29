@@ -83,4 +83,4 @@ export const StarsShader = {
             gl_FragColor = vec4(col, 1.);
         }
     `
-}
+};

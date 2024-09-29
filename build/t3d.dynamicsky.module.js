@@ -2469,8 +2469,8 @@ const CloudsShader = {
 
 		_StepSize: 0.004, // "Step size", Range(0.001, 0.02)
 
-		_NightZenithColor: [51 / 255., 72 / 255., 102 / 255.],
-		_SkyColor: [28. / 255., 32. / 255., 40. / 255.],
+		_NightZenithColor: [51 / 255, 72 / 255, 102 / 255],
+		_SkyColor: [28 / 255, 32 / 255, 40 / 255],
 		_SkyLightColor: [85 / 255, 99 / 255, 112 / 255],
 
 		_LightColorMultiplier: 4, // "Light Color multiplier", Range(0, 10)
@@ -2481,7 +2481,7 @@ const CloudsShader = {
 		_CloudSampler: null,
 		_Mask: 1., // "Clouds Density", Range (0, 4)
 		_AlphaSaturation: 2.0, // "Alpha saturation", Range(1, 10)
-		_Attenuation: 0.6, // "Attenuation", Range(0, 5)
+		_Attenuation: 0.6 // "Attenuation", Range(0, 5)
 	},
 	vertexShader: `
         attribute vec3 a_Position;
@@ -2806,7 +2806,7 @@ function copyToVector3ZUp(array, index, vector) {
 class StarsGeometry extends t3d.Geometry {
 
 	setPoints(starsArray, { brightThreshold = 0.06225, brightMax = 0.8, zUp = false } = {}) {
-		const starsNumber = starsArray.length  / 6;
+		const starsNumber = starsArray.length / 6;
 
 		const positions = [];
 		const colors = [];
@@ -3295,7 +3295,7 @@ const TransmittanceShader = {
 	name: 'sky_transmittance',
 	defines: {},
 	uniforms: {
-		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
+		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1]
 	},
 	vertexShader: `
         attribute vec3 a_Position;
@@ -3366,7 +3366,7 @@ const InscatterShader = {
 	defines: {},
 	uniforms: {
 		_Transmittance: null,
-		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
+		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1]
 	},
 	vertexShader: `
         attribute vec3 a_Position;
@@ -3565,8 +3565,8 @@ function lerp(a, b, t) {
 }
 
 function clamp(x, min, max) {
-	if (x > max) { return max; }
-	if (x < min) { return min; }
+	if (x > max) { return max }
+	if (x < min) { return min }
 	return x;
 }
 
@@ -3581,15 +3581,15 @@ class SkyPrecomputeUtil {
 		let type;
 
 		if (isWebGL2) {
-			if (capabilities.getExtension("EXT_color_buffer_float") && capabilities.getExtension("OES_texture_float_linear") && !isIOS) {
+			if (capabilities.getExtension('EXT_color_buffer_float') && capabilities.getExtension('OES_texture_float_linear') && !isIOS) {
 				type = t3d.PIXEL_TYPE.FLOAT;
 			} else {
 				type = t3d.PIXEL_TYPE.HALF_FLOAT;
 			}
 		} else {
-			if (capabilities.getExtension("OES_texture_float") && capabilities.getExtension("OES_texture_float_linear") && !isIOS) {
+			if (capabilities.getExtension('OES_texture_float') && capabilities.getExtension('OES_texture_float_linear') && !isIOS) {
 				type = t3d.PIXEL_TYPE.FLOAT;
-			} else if (capabilities.getExtension("OES_texture_half_float") && capabilities.getExtension("OES_texture_half_float_linear")) {
+			} else if (capabilities.getExtension('OES_texture_half_float') && capabilities.getExtension('OES_texture_half_float_linear')) {
 				type = t3d.PIXEL_TYPE.HALF_FLOAT;
 			} else {
 				type = t3d.PIXEL_TYPE.UNSIGNED_BYTE;
@@ -3682,7 +3682,7 @@ class SkyPrecomputeUtil {
 		const pn = 0.035; // depolatization factor for standard air
 
 		const waveLength4 = _vec3_2.set(Math.pow(WL.x, 4), Math.pow(WL.y, 4), Math.pow(WL.z, 4));
-		const delta =  waveLength4.multiplyScalar(3.0 * N * (6.0 - 7.0 * pn));
+		const delta = waveLength4.multiplyScalar(3.0 * N * (6.0 - 7.0 * pn));
 		const ray = (8 * Math.pow(Math.PI, 3) * Math.pow(n * n - 1.0, 2) * (6.0 + 3.0 * pn));
 		const betaR = _vec3_1.set(ray / delta.x, ray / delta.y, ray / delta.z);
 

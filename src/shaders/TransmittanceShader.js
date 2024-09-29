@@ -1,10 +1,10 @@
-import { AtmosphereCommon } from "./AtmosphereCommon.js";
+import { AtmosphereCommon } from './AtmosphereCommon.js';
 
 export const TransmittanceShader = {
 	name: 'sky_transmittance',
 	defines: {},
 	uniforms: {
-		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
+		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1]
 	},
 	vertexShader: `
         attribute vec3 a_Position;

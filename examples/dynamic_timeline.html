@@ -31,7 +31,7 @@
 		import { Texture2DLoader } from 't3d/examples/jsm/loaders/Texture2DLoader.js';
 		import { TextureCubeLoader } from 't3d/examples/jsm/loaders/TextureCubeLoader.js';
 
-		import { SkyPrecomputeUtil, Clouds, Stars, Sky, SkyTimeline } from "t3d-dynamic-sky";
+		import { SkyPrecomputeUtil, Clouds, Stars, Sky, SkyTimeline } from 't3d-dynamic-sky';
 
 		import { GUI } from './libs/lil-gui.esm.min.js';
 
@@ -55,12 +55,12 @@
 		scene.environmentLightIntensity = 0.8;
 
 		const cube_texture = new TextureCubeLoader().load([
-			"./textures/cube/Night/px.jpg",
-			"./textures/cube/Night/nx.jpg",
-			"./textures/cube/Night/py.jpg",
-			"./textures/cube/Night/ny.jpg",
-			"./textures/cube/Night/pz.jpg",
-			"./textures/cube/Night/nz.jpg"
+			'./textures/cube/Night/px.jpg',
+			'./textures/cube/Night/nx.jpg',
+			'./textures/cube/Night/py.jpg',
+			'./textures/cube/Night/ny.jpg',
+			'./textures/cube/Night/pz.jpg',
+			'./textures/cube/Night/nz.jpg'
 		]);
 
 		const camera = new t3d.Camera();
@@ -109,7 +109,7 @@
 
 		const textureLoader = new Texture2DLoader();
 
-		const texture = textureLoader.load("./textures/Sample_Rectangular_2048.jpg");
+		const texture = textureLoader.load('./textures/Sample_Rectangular_2048.jpg');
 		texture.anisotropy = 16;
 		texture.wrapS = texture.wrapT = t3d.TEXTURE_WRAP.REPEAT;
 
@@ -123,7 +123,7 @@
 		sky.material.defines.SKY_HDR_MODE = false;
 		scene.add(sky);
 
-		const moonTexture = textureLoader.load("./textures/Full_Moon_glow.jpg");
+		const moonTexture = textureLoader.load('./textures/Full_Moon_glow.jpg');
 		moonTexture.anisotropy = 16;
 
 		const skyMaterial = sky.material;
@@ -178,7 +178,7 @@
 					skyTimeline.timeline = 14;
 
 					initGUI(skyTimeline);
-				}
+				};
 			});
 
 		function initGUI(skyTimeline) {
@@ -189,38 +189,38 @@
 			const gui = new GUI();
 
 			gui.add(skyTimeline, 'timeline', 0, 24, 0.01);
-			gui.add(skyTimeline, '_sunSize', 0, 10, 0.01).onChange(refreshTimeline).name("Sun Size");
-			gui.add(skyMaterial.uniforms, "_SkyMieG", 0, 1, 0.01).onChange(refreshTimeline).name("Sun Anisotropy Factor");
-			gui.add(skyMaterial.uniforms, "_SkyMieScale", 0, 2, 0.01).onChange(refreshTimeline).name("Mie Scattering");
+			gui.add(skyTimeline, '_sunSize', 0, 10, 0.01).onChange(refreshTimeline).name('Sun Size');
+			gui.add(skyMaterial.uniforms, '_SkyMieG', 0, 1, 0.01).onChange(refreshTimeline).name('Sun Anisotropy Factor');
+			gui.add(skyMaterial.uniforms, '_SkyMieScale', 0, 2, 0.01).onChange(refreshTimeline).name('Mie Scattering');
 
 			const directionFolder = gui.addFolder('Direction');
 
-			directionFolder.add(skyTimeline._sunAndMoon, "sunDirection", -180, 180, 0.01).onChange(refreshTimeline).name("Sun Direction");
-			directionFolder.add(skyTimeline._sunAndMoon, "sunEquatorOffset", -60, 60, 0.01).onChange(refreshTimeline).name("Sun Equator Offset");
+			directionFolder.add(skyTimeline._sunAndMoon, 'sunDirection', -180, 180, 0.01).onChange(refreshTimeline).name('Sun Direction');
+			directionFolder.add(skyTimeline._sunAndMoon, 'sunEquatorOffset', -60, 60, 0.01).onChange(refreshTimeline).name('Sun Equator Offset');
 		
 			directionFolder.close();
 
 			const nightSkyFolder = gui.addFolder('Night Sky');
 
-			nightSkyFolder.addColor(skyTimeline._nightSkySettings, "moonInnerCorona").onChange(refreshTimeline).name("Moon Inner Corona");
-			nightSkyFolder.addColor(skyTimeline._nightSkySettings, "moonOuterCorona").onChange(refreshTimeline).name("Moon Outer Corona");
+			nightSkyFolder.addColor(skyTimeline._nightSkySettings, 'moonInnerCorona').onChange(refreshTimeline).name('Moon Inner Corona');
+			nightSkyFolder.addColor(skyTimeline._nightSkySettings, 'moonOuterCorona').onChange(refreshTimeline).name('Moon Outer Corona');
 
-			nightSkyFolder.add(skyTimeline._nightSkySettings.moonInnerCorona, '3', 0, 1, 0.001).onChange(refreshTimeline).name("Inner Corona Factor");
-			nightSkyFolder.add(skyTimeline._nightSkySettings.moonOuterCorona, '3', 0, 1, 0.001).onChange(refreshTimeline).name("Outer Corona Factor");
+			nightSkyFolder.add(skyTimeline._nightSkySettings.moonInnerCorona, '3', 0, 1, 0.001).onChange(refreshTimeline).name('Inner Corona Factor');
+			nightSkyFolder.add(skyTimeline._nightSkySettings.moonOuterCorona, '3', 0, 1, 0.001).onChange(refreshTimeline).name('Outer Corona Factor');
 
-			nightSkyFolder.add(skyTimeline._nightSkySettings, 'moonSize', 0, 2, 0.01).onChange(refreshTimeline).name("Moon Size");
+			nightSkyFolder.add(skyTimeline._nightSkySettings, 'moonSize', 0, 2, 0.01).onChange(refreshTimeline).name('Moon Size');
 
-			nightSkyFolder.addColor(skyTimeline._nightSkySettings, "nightHorizonColor").onChange(refreshTimeline).name("Night Horizon Color");
-			nightSkyFolder.addColor(skyTimeline._nightSkySettings, "nightZenithColor").onChange(refreshTimeline).name("Night Zenith Color");
+			nightSkyFolder.addColor(skyTimeline._nightSkySettings, 'nightHorizonColor').onChange(refreshTimeline).name('Night Horizon Color');
+			nightSkyFolder.addColor(skyTimeline._nightSkySettings, 'nightZenithColor').onChange(refreshTimeline).name('Night Zenith Color');
 
-			nightSkyFolder.add(skyTimeline._nightSkySettings.nightHorizonColor, '3', 0, 1, 0.001).onChange(refreshTimeline).name("Night Horizon Factor");
-			nightSkyFolder.add(skyTimeline._nightSkySettings.nightZenithColor, '3', 0, 1, 0.001).onChange(refreshTimeline).name("Night Zenith Factor");
+			nightSkyFolder.add(skyTimeline._nightSkySettings.nightHorizonColor, '3', 0, 1, 0.001).onChange(refreshTimeline).name('Night Horizon Factor');
+			nightSkyFolder.add(skyTimeline._nightSkySettings.nightZenithColor, '3', 0, 1, 0.001).onChange(refreshTimeline).name('Night Zenith Factor');
 
 			nightSkyFolder.close();
 
 			const cloudsFolder = gui.addFolder('Clouds');
 
-			cloudsFolder.addColor(material.uniforms, "_SkyColor").name("Sky Color");
+			cloudsFolder.addColor(material.uniforms, '_SkyColor').name('Sky Color');
 		}
 		
 		const clock = new Clock();
@@ -249,7 +249,7 @@
 
 			forwardRenderer.backRenderTarget.resize(width, height);
 		}
-		window.addEventListener("resize", onWindowResize, false);
+		window.addEventListener('resize', onWindowResize, false);
 	</script>
 </body>
 </html>

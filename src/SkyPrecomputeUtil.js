@@ -1,7 +1,7 @@
 import * as t3d from 't3d';
 import { TransmittanceShader } from './shaders/TransmittanceShader.js';
 import { InscatterShader } from './shaders/InscatterShader.js';
-import { clamp, lerp } from "./Utils.js";
+import { clamp, lerp } from './Utils.js';
 
 export class SkyPrecomputeUtil {
 
@@ -14,15 +14,15 @@ export class SkyPrecomputeUtil {
 		let type;
 
 		if (isWebGL2) {
-			if (capabilities.getExtension("EXT_color_buffer_float") && capabilities.getExtension("OES_texture_float_linear") && !isIOS) {
+			if (capabilities.getExtension('EXT_color_buffer_float') && capabilities.getExtension('OES_texture_float_linear') && !isIOS) {
 				type = t3d.PIXEL_TYPE.FLOAT;
 			} else {
 				type = t3d.PIXEL_TYPE.HALF_FLOAT;
 			}
 		} else {
-			if (capabilities.getExtension("OES_texture_float") && capabilities.getExtension("OES_texture_float_linear") && !isIOS) {
+			if (capabilities.getExtension('OES_texture_float') && capabilities.getExtension('OES_texture_float_linear') && !isIOS) {
 				type = t3d.PIXEL_TYPE.FLOAT;
-			} else if (capabilities.getExtension("OES_texture_half_float") && capabilities.getExtension("OES_texture_half_float_linear")) {
+			} else if (capabilities.getExtension('OES_texture_half_float') && capabilities.getExtension('OES_texture_half_float_linear')) {
 				type = t3d.PIXEL_TYPE.HALF_FLOAT;
 			} else {
 				type = t3d.PIXEL_TYPE.UNSIGNED_BYTE;
@@ -115,7 +115,7 @@ export class SkyPrecomputeUtil {
 		const pn = 0.035; // depolatization factor for standard air
 
 		const waveLength4 = _vec3_2.set(Math.pow(WL.x, 4), Math.pow(WL.y, 4), Math.pow(WL.z, 4));
-		const delta =  waveLength4.multiplyScalar(3.0 * N * (6.0 - 7.0 * pn));
+		const delta = waveLength4.multiplyScalar(3.0 * N * (6.0 - 7.0 * pn));
 		const ray = (8 * Math.pow(Math.PI, 3) * Math.pow(n * n - 1.0, 2) * (6.0 + 3.0 * pn));
 		const betaR = _vec3_1.set(ray / delta.x, ray / delta.y, ray / delta.z);
 

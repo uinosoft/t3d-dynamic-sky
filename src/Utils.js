@@ -8,7 +8,7 @@ export function lerp(a, b, t) {
 }
 
 export function clamp(x, min, max) {
-	if (x > max) { return max; }
-	if (x < min) { return min; }
+	if (x > max) { return max }
+	if (x < min) { return min }
 	return x;
 }

@@ -1,5 +1,5 @@
 import * as t3d from 't3d';
-import { SkyShader } from "./shaders/SkyShader.js";
+import { SkyShader } from './shaders/SkyShader.js';
 
 export class Sky extends t3d.Mesh {
 

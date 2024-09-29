@@ -1,6 +1,6 @@
 import * as t3d from 't3d';
-import { SkyDomeData } from "./SkyDomeData.js";
-import { CloudsShader } from "./shaders/CloudsShader.js";
+import { SkyDomeData } from './SkyDomeData.js';
+import { CloudsShader } from './shaders/CloudsShader.js';
 
 export class Clouds extends t3d.Mesh {
 

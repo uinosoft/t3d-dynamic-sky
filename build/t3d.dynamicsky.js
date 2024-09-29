@@ -46,8 +46,8 @@
 			_StepSize: 0.004,
 			// "Step size", Range(0.001, 0.02)
 
-			_NightZenithColor: [51 / 255., 72 / 255., 102 / 255.],
-			_SkyColor: [28. / 255., 32. / 255., 40. / 255.],
+			_NightZenithColor: [51 / 255, 72 / 255, 102 / 255],
+			_SkyColor: [28 / 255, 32 / 255, 40 / 255],
 			_SkyLightColor: [85 / 255, 99 / 255, 112 / 255],
 			_LightColorMultiplier: 4,
 			// "Light Color multiplier", Range(0, 10)
@@ -62,7 +62,6 @@
 			// "Alpha saturation", Range(1, 10)
 			_Attenuation: 0.6 // "Attenuation", Range(0, 5)
 		},
-
 		vertexShader: `
 				attribute vec3 a_Position;
 		attribute vec3 a_Normal;
@@ -1113,15 +1112,15 @@ float Limit(float r, float mu) {
 			const isIOS = /(iPad|iPhone|iPod)/g.test(navigator.userAgent);
 			let type;
 			if (isWebGL2) {
-				if (capabilities.getExtension("EXT_color_buffer_float") && capabilities.getExtension("OES_texture_float_linear") && !isIOS) {
+				if (capabilities.getExtension('EXT_color_buffer_float') && capabilities.getExtension('OES_texture_float_linear') && !isIOS) {
 					type = t3d__namespace.PIXEL_TYPE.FLOAT;
 				} else {
 					type = t3d__namespace.PIXEL_TYPE.HALF_FLOAT;
 				}
 			} else {
-				if (capabilities.getExtension("OES_texture_float") && capabilities.getExtension("OES_texture_float_linear") && !isIOS) {
+				if (capabilities.getExtension('OES_texture_float') && capabilities.getExtension('OES_texture_float_linear') && !isIOS) {
 					type = t3d__namespace.PIXEL_TYPE.FLOAT;
-				} else if (capabilities.getExtension("OES_texture_half_float") && capabilities.getExtension("OES_texture_half_float_linear")) {
+				} else if (capabilities.getExtension('OES_texture_half_float') && capabilities.getExtension('OES_texture_half_float_linear')) {
 					type = t3d__namespace.PIXEL_TYPE.HALF_FLOAT;
 				} else {
 					type = t3d__namespace.PIXEL_TYPE.UNSIGNED_BYTE;

@@ -12,8 +12,8 @@ export const CloudsShader = {
 
 		_StepSize: 0.004, // "Step size", Range(0.001, 0.02)
 
-		_NightZenithColor: [51 / 255., 72 / 255., 102 / 255.],
-		_SkyColor: [28. / 255., 32. / 255., 40. / 255.],
+		_NightZenithColor: [51 / 255, 72 / 255, 102 / 255],
+		_SkyColor: [28 / 255, 32 / 255, 40 / 255],
 		_SkyLightColor: [85 / 255, 99 / 255, 112 / 255],
 
 		_LightColorMultiplier: 4, // "Light Color multiplier", Range(0, 10)
@@ -24,7 +24,7 @@ export const CloudsShader = {
 		_CloudSampler: null,
 		_Mask: 1., // "Clouds Density", Range (0, 4)
 		_AlphaSaturation: 2.0, // "Alpha saturation", Range(1, 10)
-		_Attenuation: 0.6, // "Attenuation", Range(0, 5)
+		_Attenuation: 0.6 // "Attenuation", Range(0, 5)
 	},
 	vertexShader: `
         attribute vec3 a_Position;

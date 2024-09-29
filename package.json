@@ -10,9 +10,7 @@
     "url": "https://github.com/uinosoft/t3d-dynamic-sky"
   },
   "files": [
-    "build/t3d.dynamicsky.js",
-    "build/t3d.dynamicsky.min.js",
-    "build/t3d.dynamicsky.module.js",
+    "build",
     "LICENSE",
     "package.json",
     "README.md",
@@ -28,18 +26,6 @@
     "canvas",
     "html5"
   ],
-  "directories": {
-    "example": "examples"
-  },
-  "eslintConfig": {
-    "root": true,
-    "extends": [
-      "./tools/.eslintrc.cjs"
-    ],
-    "plugins": [
-      "html"
-    ]
-  },
   "author": "uino",
   "license": "BSD-3-Clause",
   "devDependencies": {
@@ -48,8 +34,9 @@
     "@rollup/plugin-babel": "^6.0.3",
     "@rollup/plugin-terser": "^0.4.1",
     "eslint": "^8.38.0",
-    "eslint-plugin-html": "^7.1.0",
-    "rollup": "^3.20.2"
+    "eslint-plugin-html": "^8.1.2",
+    "eslint-plugin-import": "^2.30.0",
+    "rollup": "^4.22.5"
   },
   "peerDependencies": {
     "t3d": ">=0.2.0 <0.4.0"

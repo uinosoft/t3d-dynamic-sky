@@ -1,5 +1,5 @@
 import * as t3d from 't3d';
-import { clamp, lerp } from "./Utils.js";
+import { clamp, lerp } from './Utils.js';
 
 export class SkyTimeline {
 

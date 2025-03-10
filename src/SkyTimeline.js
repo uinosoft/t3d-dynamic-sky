@@ -271,10 +271,8 @@ export class SkyTimeline {
 		const { moonQuaternion, moonFade } = stats;
 
 		if (stars) {
-			_mat4_1.makeRotationFromQuaternion(moonQuaternion);
-			_mat4_1.toArray(stars.material.uniforms['_StarRotationMatrix']);
-
-			stars.material.uniforms['_StarIntensity'] = 40 * moonFade;
+			stars.quaternion.copy(moonQuaternion);
+			stars.material.uniforms.starIntensity = 40 * moonFade;
 		}
 	}
 

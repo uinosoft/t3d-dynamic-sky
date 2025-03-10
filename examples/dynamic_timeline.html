@@ -154,7 +154,7 @@
 
 		let stars;
 
-		fetch('./StarsData.bytes')
+		fetch('./stars/StarsData-2048.bin')
 			.then(res => res.blob())
 			.then(blob => {
 				const reader = new FileReader();
@@ -164,9 +164,7 @@
 
 					stars = new Stars(bytesArray);
 					stars.renderOrder = 1;
-					stars.material.transparent = true;
-					stars.material.blending = t3d.BLEND_TYPE.ADD;
-					stars.material.uniforms._CameraFar = 1000;
+					stars.material.uniforms.starDistance = 1000;
 					scene.add(stars);
 
 					const skyTimeline = new SkyTimeline({
@@ -234,7 +232,7 @@
 			material.uniforms._Rotation = count * 0.0005;
 
 			if (stars) {
-				stars.material.uniforms._Time += deltaTime / 1000 * 500;
+				stars.material.uniforms.time += deltaTime / 1000 * 500;
 			}
 
 			forwardRenderer.render(scene, camera);

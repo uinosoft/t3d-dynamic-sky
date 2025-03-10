@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html>
-
 <head>
 	<meta charset="utf-8">
-	<title>t3d - stars</title>
+	<title>t3d-dynacim-sky - stars</title>
 	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link rel="stylesheet" type="text/css" href="./main.css">
 </head>
-
 <body>
 	<!-- Import maps polyfill -->
 	<!-- Remove this when import maps will be widely supported -->
@@ -24,11 +23,11 @@
 
 	<script type="module">
 		import * as t3d from 't3d';
-		import { AxisHelper } from 't3d/addons/objects/AxisHelper.js';
-		import { GridHelper } from 't3d/addons/objects/GridHelper.js';
-		import { Clock } from 't3d/addons/Clock.js';
 		import { ForwardRenderer } from 't3d/addons/render/ForwardRenderer.js';
 		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
+		import { AxisHelper } from 't3d/addons/objects/AxisHelper.js';
+		import { GridHelper } from 't3d/addons/objects/GridHelper.js';
+		import { Timer } from 't3d/addons/misc/Timer.js';
 
 		import { Stars } from 't3d-dynamic-sky';
 
@@ -42,10 +41,18 @@
 		canvas.height = height;
 		document.body.appendChild(canvas);
 
-		const forwardRenderer = new ForwardRenderer(canvas, { antialias: true, alpha: true });
+		const forwardRenderer = new ForwardRenderer(canvas);
 		forwardRenderer.setClearColor(0, 0, 0, 1);
 
 		const scene = new t3d.Scene();
+
+		const camera = new t3d.Camera();
+		camera.setPerspective(70 / 180 * Math.PI, width / height, 0.1, 1000);
+		camera.position.set(0, 1, 5);
+		scene.add(camera);
+
+		const controller = new OrbitControls(camera, canvas);
+		controller.target.set(0, 0, -0.5);
 
 		const axis = new AxisHelper(2);
 		axis.material.depthTest = false;
@@ -55,31 +62,34 @@
 		const grid = new GridHelper(10, 10, 0xffffff, 0x888888);
 		scene.add(grid);
 
-		const camera = new t3d.Camera();
-		camera.setPerspective(70 / 180 * Math.PI, width / height, 0.1, 1000);
-		camera.position.set(0, 1, 5);
-		scene.add(camera);
+		// create stars
+
+		const params = { fov: 70 };
 
 		let stars;
 
-		fetch('./StarsData.bytes').then(res => res.arrayBuffer()).then(e => {
-			const bytesArray = new Float32Array(e);
-
+		fetch('./stars/StarsData-2048.bin').then(res => res.arrayBuffer()).then(arrayBuffer => {
 			console.time('Create stars');
-			stars = new Stars(bytesArray);
-			console.timeEnd('Create stars');
-			stars.material.uniforms._CameraFar = 1000;
+			stars = new Stars(new Float32Array(arrayBuffer));
 			scene.add(stars);
+			console.timeEnd('Create stars');
+		
+			stars.material.uniforms.starDistance = 1000; // same with camera far
+
+			const rotation = new t3d.Euler();
+			rotation.onChange(() => stars.euler.copy(rotation));
+
+			// gui
 
 			const gui = new GUI();
 
-			gui.add(stars.material.uniforms, '_StarIntensity', 0, 80, 1).name('Star Intensity');
-			gui.add(stars.material.uniforms, '_HeightFalloff', 0.01, 2, 0.01).name('Height Falloff');
-			gui.add(stars.material.uniforms, '_StarSize', 0, 30, 0.01).name('Star Size');
-			// gui.add(stars.material.uniforms, "_RadiusFactor", 0.1, 1, 0.01).name("Radius Factor");
+			gui.add(stars.material.uniforms, 'starIntensity', 0, 100, 1).name('Star Intensity');
+			gui.add(stars.material.uniforms, 'heightFalloff', 0, 2, 0.01).name('Height Falloff');
+			gui.add(stars.material.uniforms, 'starSize', 0, 30, 0.01).name('Star Size');
+			gui.add(rotation, 'y', 0, Math.PI * 2, 0.01).name('Rotation Y');
 
 			const cameraFolder = gui.addFolder('Camera').close();
-			cameraFolder.add({ fov: 70 }, 'fov', 10, 120).name('FOV').onChange(value => {
+			cameraFolder.add(params, 'fov', 10, 120, 1).name('FOV').onChange(value => {
 				camera.setPerspective(value / 180 * Math.PI, width / height, 0.1, 1000);
 			});
 
@@ -87,18 +97,17 @@
 			debugFolder.add(grid, 'visible').name('Grid');
 		});
 
-		const controller = new OrbitControls(camera, canvas);
-		controller.target.set(0, 0, -0.5);
+		//
 
-		const clock = new Clock();
-		function loop(count) {
+		const timer = new Timer();
+		function loop(timestamp) {
 			requestAnimationFrame(loop);
 
 			controller.update();
+			timer.update(timestamp);
 
-			const deltaTime = clock.getDelta();
 			if (stars) {
-				stars.material.uniforms._Time += deltaTime / 2;
+				stars.material.uniforms.time += timer.getDelta() * 0.5;
 			}
 
 			forwardRenderer.render(scene, camera);
@@ -109,7 +118,7 @@
 			width = window.innerWidth || 2;
 			height = window.innerHeight || 2;
 
-			camera.setPerspective(70 / 180 * Math.PI, width / height, 0.1, 1000);
+			camera.setPerspective(params.fov / 180 * Math.PI, width / height, 0.1, 1000);
 
 			forwardRenderer.backRenderTarget.resize(width, height);
 		}

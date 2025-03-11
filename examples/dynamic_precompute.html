@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html>
-
 <head>
 	<meta charset="utf-8">
 	<title>t3d - precompute</title>
 	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link rel="stylesheet" type="text/css" href="./main.css">
 </head>
-
 <body>
 	<!-- Import maps polyfill -->
 	<!-- Remove this when import maps will be widely supported -->
@@ -48,11 +47,11 @@
 		const capabilities = renderer.capabilities;
 		
 		const skyPrecomputeUtil = new SkyPrecomputeUtil(capabilities);
+		// console.log(skyPrecomputeUtil.setBetaRayleighDensity(new t3d.Vector3(680, 550, 440), new t3d.Color3(128 / 255, 128 / 255, 128 / 255, 255 / 255), 1.0));
+		// [0.05952087360787257, 0.05952087360787257, 0.05952087360787257, 1];
+
 		skyPrecomputeUtil.computeTransmittance(renderer);
 		skyPrecomputeUtil.computeInscatter(renderer);
-
-		// console.log(skyPrecomputeUtil.setBetaRayleighDensity(new t3d.Vector3(680, 550, 440), new t3d.Vector3(128 / 255, 128 / 255, 128 / 255, 255 / 255), 1.0));
-		// [0.05952087360787257, 0.05952087360787257, 0.05952087360787257, 1];
 
 		const scene = new t3d.Scene();
 

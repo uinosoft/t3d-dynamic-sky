@@ -29,7 +29,7 @@
 		import { Texture2DLoader } from 't3d/examples/jsm/loaders/Texture2DLoader.js';
 		import { TextureCubeLoader } from 't3d/examples/jsm/loaders/TextureCubeLoader.js';
 
-		import { SkyPrecomputeUtil, Clouds, Sky } from 't3d-dynamic-sky';
+		import { SkyPrecomputeUtil, Sky } from 't3d-dynamic-sky';
 
 		import { GUI } from './libs/lil-gui.esm.min.js';
 		
@@ -38,8 +38,6 @@
 
 		const container = document.createElement('div');
 		document.body.appendChild(container);
-		// container.style.background = '#4584b4';
-		container.style.background = '#1e4877';
 
 		const canvas = document.createElement('canvas');
 		canvas.width = width;
@@ -99,22 +97,11 @@
 		directionalLight.shadow.windowSize = 15;
 		scene.add(directionalLight);
 
-		const clouds = new Clouds();
-		clouds.renderOrder = 2;
-		clouds.material.blending = t3d.BLEND_TYPE.NORMAL;
-		// clouds.visible = false;
-		scene.add(clouds);
-
 		const textureLoader = new Texture2DLoader();
 
 		const texture = textureLoader.load('./textures/Sample_Rectangular_2048.jpg');
 		texture.anisotropy = 16;
 		texture.wrapS = texture.wrapT = t3d.TEXTURE_WRAP.REPEAT;
-
-		const material = clouds.material;
-		material.uniforms._CameraFar = 1000;
-		material.uniforms._CloudSampler = texture;
-		material.uniforms._SkyColor = [158 / 255, 158 / 255, 158 / 255];
 
 		const sky = new Sky();
 		scene.add(sky);
@@ -164,18 +151,11 @@
 			vector3.normalize();
 
 			vector3.toArray(skyMaterial.uniforms['_SunDirSize']);
-			vector3.toArray(material.uniforms['_MoonDirSize']);
 			vector3.multiplyScalar(-1);
 			vector3.toArray(skyMaterial.uniforms['_MoonDirSize']);
-			vector3.toArray(material.uniforms['_SunDirSize']);
 		}
 
 		setSunAndMoonDir();
-
-		function syncNightParams() {
-			material.uniforms._uSkyNightParams[0] = skyMaterial.uniforms._uSkyNightParams[0];
-			material.uniforms._uSkyNightParams[1] = 1 - skyMaterial.uniforms._uSkyNightParams[1];
-		}
 
 		const gui = new GUI();
 
@@ -205,8 +185,8 @@
 		gui.add(skyMaterial.uniforms._NightHorizonColor, 3, 0, 1, 0.001).name('Night Horizon Factor');
 		gui.add(skyMaterial.uniforms._NightZenithColor, 3, 0, 1, 0.001).name('Night Zenith Factor');
 
-		gui.add(skyMaterial.uniforms._uSkyNightParams, 0, 0, 1, 0.01).onChange(syncNightParams).name('Night Param0');
-		gui.add(skyMaterial.uniforms._uSkyNightParams, 1, 0, 1, 0.01).onChange(syncNightParams).name('Night Param1');
+		gui.add(skyMaterial.uniforms._uSkyNightParams, 0, 0, 1, 0.01).name('Night Param0');
+		gui.add(skyMaterial.uniforms._uSkyNightParams, 1, 0, 1, 0.01).name('Night Param1');
 		gui.add(skyMaterial.uniforms._uSkyNightParams, 2, 0, 1, 0.01).name('Night Param2');
 		
 		gui.add(spherical, 'phi', 0, Math.PI).onChange(setSunAndMoonDir);
@@ -216,8 +196,6 @@
 			requestAnimationFrame(loop);
 
 			controller.update();
-
-			material.uniforms._Rotation = count * 0.001;
 
 			forwardRenderer.render(scene, camera);
 		}

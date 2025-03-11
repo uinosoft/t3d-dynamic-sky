@@ -1,7 +1,6 @@
-import * as t3d from 't3d';
+import { PIXEL_TYPE, RenderTarget2D, TEXTURE_FILTER, PIXEL_FORMAT, ShaderPostPass, Vector3, MathUtils } from 't3d';
 import { TransmittanceShader } from './shaders/TransmittanceShader.js';
 import { InscatterShader } from './shaders/InscatterShader.js';
-import { clamp, lerp } from './Utils.js';
 
 export class SkyPrecomputeUtil {
 
@@ -15,45 +14,45 @@ export class SkyPrecomputeUtil {
 
 		if (isWebGL2) {
 			if (capabilities.getExtension('EXT_color_buffer_float') && capabilities.getExtension('OES_texture_float_linear') && !isIOS) {
-				type = t3d.PIXEL_TYPE.FLOAT;
+				type = PIXEL_TYPE.FLOAT;
 			} else {
-				type = t3d.PIXEL_TYPE.HALF_FLOAT;
+				type = PIXEL_TYPE.HALF_FLOAT;
 			}
 		} else {
 			if (capabilities.getExtension('OES_texture_float') && capabilities.getExtension('OES_texture_float_linear') && !isIOS) {
-				type = t3d.PIXEL_TYPE.FLOAT;
+				type = PIXEL_TYPE.FLOAT;
 			} else if (capabilities.getExtension('OES_texture_half_float') && capabilities.getExtension('OES_texture_half_float_linear')) {
-				type = t3d.PIXEL_TYPE.HALF_FLOAT;
+				type = PIXEL_TYPE.HALF_FLOAT;
 			} else {
-				type = t3d.PIXEL_TYPE.UNSIGNED_BYTE;
+				type = PIXEL_TYPE.UNSIGNED_BYTE;
 				console.warn('Half float texture is not supported!');
 			}
 		}
 
 		// Render targets
 
-		const transmittanceRT = new t3d.RenderTarget2D(256, 64);
-		transmittanceRT.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
-		transmittanceRT.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
+		const transmittanceRT = new RenderTarget2D(256, 64);
+		transmittanceRT.texture.minFilter = TEXTURE_FILTER.LINEAR;
+		transmittanceRT.texture.magFilter = TEXTURE_FILTER.LINEAR;
 		transmittanceRT.texture.type = type;
-		transmittanceRT.texture.format = t3d.PIXEL_FORMAT.RGBA;
+		transmittanceRT.texture.format = PIXEL_FORMAT.RGBA;
 		transmittanceRT.texture.generateMipmaps = false;
 
-		const inscatterRT = new t3d.RenderTarget2D(512, 512);
-		inscatterRT.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
-		inscatterRT.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
+		const inscatterRT = new RenderTarget2D(512, 512);
+		inscatterRT.texture.minFilter = TEXTURE_FILTER.LINEAR;
+		inscatterRT.texture.magFilter = TEXTURE_FILTER.LINEAR;
 		inscatterRT.texture.type = type;
-		inscatterRT.texture.format = t3d.PIXEL_FORMAT.RGBA;
+		inscatterRT.texture.format = PIXEL_FORMAT.RGBA;
 		inscatterRT.texture.generateMipmaps = false;
 
 		// Render Passes
 
 		const betaR = [5.8e-3, 1.35e-2, 3.31e-2, 1]; // default betaR
 
-		const transmittancePass = new t3d.ShaderPostPass(TransmittanceShader);
+		const transmittancePass = new ShaderPostPass(TransmittanceShader);
 		transmittancePass.uniforms.betaR = betaR;
 
-		const inscatterPass = new t3d.ShaderPostPass(InscatterShader);
+		const inscatterPass = new ShaderPostPass(InscatterShader);
 		inscatterPass.uniforms._Transmittance = transmittanceRT.texture;
 		inscatterPass.uniforms.betaR = betaR;
 
@@ -94,17 +93,17 @@ export class SkyPrecomputeUtil {
 		this._inscatterPass.render(renderer);
 	}
 
-	setBetaRayleighDensity(Wavelengths, SkyTint, AtmosphereThickness) {
+	setBetaRayleighDensity(wavelengths, skyTint, atmosphereThickness) {
 		// Sky Tint shifts the value of Wavelengths
 		const variableRangeWavelengths = _vec3_1.set(
-			lerp(Wavelengths.x + 150, Wavelengths.x - 150, SkyTint.r),
-			lerp(Wavelengths.y + 150, Wavelengths.y - 150, SkyTint.g),
-			lerp(Wavelengths.z + 150, Wavelengths.z - 150, SkyTint.b)
+			MathUtils.lerp(wavelengths.x + 150, wavelengths.x - 150, skyTint.r),
+			MathUtils.lerp(wavelengths.y + 150, wavelengths.y - 150, skyTint.g),
+			MathUtils.lerp(wavelengths.z + 150, wavelengths.z - 150, skyTint.b)
 		);
 
-		variableRangeWavelengths.x = clamp(variableRangeWavelengths.x, 380, 780);
-		variableRangeWavelengths.y = clamp(variableRangeWavelengths.y, 380, 780);
-		variableRangeWavelengths.z = clamp(variableRangeWavelengths.z, 380, 780);
+		variableRangeWavelengths.x = MathUtils.clamp(variableRangeWavelengths.x, 380, 780);
+		variableRangeWavelengths.y = MathUtils.clamp(variableRangeWavelengths.y, 380, 780);
+		variableRangeWavelengths.z = MathUtils.clamp(variableRangeWavelengths.z, 380, 780);
 
 		// Evaluate Beta Rayleigh function is based on A.J.Preetham
 
@@ -121,13 +120,13 @@ export class SkyPrecomputeUtil {
 
 		// Atmosphere Thickness ( Rayleigh ) scale
 		const Km = 1000.0; // kilo meter unit
-		betaR.multiplyScalar(Km * AtmosphereThickness);
+		betaR.multiplyScalar(Km * atmosphereThickness);
 
 		// w channel solves the Rayleigh Offset artifact issue
 		this._betaR[0] = betaR.x;
 		this._betaR[1] = betaR.y;
 		this._betaR[2] = betaR.z;
-		this._betaR[3] = Math.max(Math.pow(AtmosphereThickness, Math.PI), 1);
+		this._betaR[3] = Math.max(Math.pow(atmosphereThickness, Math.PI), 1);
 
 		// w channel solves the Rayleigh Offset artifact issue
 		return this._betaR;
@@ -135,5 +134,5 @@ export class SkyPrecomputeUtil {
 
 }
 
-const _vec3_1 = new t3d.Vector3();
-const _vec3_2 = new t3d.Vector3();
+const _vec3_1 = new Vector3();
+const _vec3_2 = new Vector3();

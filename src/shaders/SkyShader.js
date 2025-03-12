@@ -1,3 +1,5 @@
+import { TransmittanceLookup } from './chunks/TransmittanceLookup.js';
+
 export const SkyShader = {
 	name: 'sky_bg',
 	defines: {
@@ -150,8 +152,24 @@ export const SkyShader = {
         const float RES_MU_S = 32.; // width per table
         const float RES_NU = 8.;	// table per texture depth
 
-        #define TRANSMITTANCE_NON_LINEAR	
+        #define TRANSMITTANCE_MAPPING 1
         #define INSCATTER_NON_LINEAR
+
+		// nearest intersection of ray r, mu with ground or top atmosphere boundary 
+		// mu = cos(ray zenith angle at ray origin) 
+		float Limit(float r, float mu) { 
+			float dout = -r * mu + sqrt(r * r * (mu * mu - 1.0) + RL * RL);
+
+			float delta2 = r * r * (mu * mu - 1.0) + Rg * Rg;
+			if (delta2 >= 0.0) { 
+				float din = -r * mu - sqrt(delta2);
+				if (din >= 0.0) { 
+					dout = min(dout, din); 
+				} 
+			}
+			
+			return dout; 
+		}
 
         #ifdef FIX_INSCATTER_SAMPLE
             float fixU(float u) {
@@ -239,17 +257,7 @@ export const SkyShader = {
 			return miePhase_g.x / pow(miePhase_g.y - miePhase_g.z * mu, 1.5);
 		}
 
-        vec3 Transmittance(float r, float mu) {
-            float uR, uMu;
-            #ifdef TRANSMITTANCE_NON_LINEAR
-                uR = sqrt((r - Rg) / (Rt - Rg));
-                uMu = atan((mu + 0.15) / (1.0 + 0.15) * tan(1.5)) / 1.5;
-            #else
-                uR = (r - Rg) / (Rt - Rg);
-                uMu = (mu + 0.15) / (1.0 + 0.15);
-            #endif    
-            return texture2D(_Transmittance, vec2(uMu, uR)).rgb;
-        }
+        ${TransmittanceLookup}
 
         const vec3 EARTH_POS = vec3(0.0, 6360010.0, 0.0);
         const float SUN_BRIGHTNESS = 40.0;

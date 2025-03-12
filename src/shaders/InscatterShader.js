@@ -1,4 +1,5 @@
-import { AtmosphereCommon } from './AtmosphereCommon.js';
+import { AtmosphereCommon } from './chunks/AtmosphereCommon.js';
+import { TransmittanceLookup } from './chunks/TransmittanceLookup.js';
 
 export const InscatterShader = {
 	name: 'sky_inscatter',
@@ -85,21 +86,9 @@ export const InscatterShader = {
 
         // ---------------------------------------------------------------------------- 
         // TRANSMITTANCE FUNCTIONS
-        // ---------------------------------------------------------------------------- 
-
-        // transmittance(=transparency) of atmosphere for infinite ray (r, mu)
-        // (mu = cos(view zenith angle)), intersections with ground ignored        
-        vec3 Transmittance(float r, float mu) {
-            float uR, uMu;
-            #ifdef TRANSMITTANCE_NON_LINEAR
-                uR = sqrt((r - Rg) / (Rt - Rg));
-                uMu = atan((mu + 0.15) / (1.0 + 0.15) * tan(1.5)) / 1.5;
-            #else
-                uR = (r - Rg) / (Rt - Rg);
-                uMu = (mu + 0.15) / (1.0 + 0.15);
-            #endif    
-            return texture2D(_Transmittance, vec2(uMu, uR)).rgb;
-        }
+        // ----------------------------------------------------------------------------
+		
+		${TransmittanceLookup}
 
         // transmittance(=transparency) of atmosphere between x and x0
         // assume segment x, x0 not intersecting ground 

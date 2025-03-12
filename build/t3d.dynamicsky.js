@@ -370,6 +370,45 @@
 		`
 	};
 
+	// ref https://ebruneton.github.io/precomputed_atmospheric_scattering
+	const TransmittanceLookup = `
+vec2 GetTransmittanceUvFromRMu_new17(float r, float mu) {
+	float H = sqrt(Rt * Rt - Rg * Rg);
+	float rho = sqrt(r * r - Rg * Rg);
+	float d = Limit(r, mu);
+	float d_min = Rt - r;
+	float d_max = rho + H;
+	float x_mu = (d - d_min) / (d_max - d_min);
+	float x_r = rho / H;
+	return vec2(x_mu, x_r);
+}
+
+vec2 GetTransmittanceUvFromRMu_original08(float r, float mu) {
+	float u = atan((mu + 0.15) / (1.0 + 0.15) * tan(1.5)) / 1.5;
+	float v = sqrt((r - Rg) / (Rt - Rg));
+	return vec2(u, v);
+}
+
+vec2 GetRMuFromTransmittanceUv_linear(float r, float mu) {
+	float u = (mu + 0.15) / (1.0 + 0.15);
+	float v = (r - Rg) / (Rt - Rg);
+	return vec2(u, v);
+}
+
+// transmittance(=transparency) of atmosphere for infinite ray (r, mu)
+// (mu = cos(view zenith angle)), intersections with ground ignored
+vec3 Transmittance(float r, float mu) {
+	#if TRANSMITTANCE_MAPPING == 0
+		vec2 uv = GetRMuFromTransmittanceUv_linear(r, mu);
+	#elif TRANSMITTANCE_MAPPING == 1
+		vec2 uv = GetTransmittanceUvFromRMu_original08(r, mu);
+	#else
+		vec2 uv = GetTransmittanceUvFromRMu_new17(r, mu);
+	#endif
+	return texture2D(_Transmittance, uv).rgb;
+}
+`;
+
 	const SkyShader = {
 		name: 'sky_bg',
 		defines: {
@@ -503,8 +542,24 @@
 				const float RES_MU_S = 32.; // width per table
 				const float RES_NU = 8.;	// table per texture depth
 
-				#define TRANSMITTANCE_NON_LINEAR	
+				#define TRANSMITTANCE_MAPPING 1
 				#define INSCATTER_NON_LINEAR
+
+		// nearest intersection of ray r, mu with ground or top atmosphere boundary 
+		// mu = cos(ray zenith angle at ray origin) 
+		float Limit(float r, float mu) { 
+			float dout = -r * mu + sqrt(r * r * (mu * mu - 1.0) + RL * RL);
+
+			float delta2 = r * r * (mu * mu - 1.0) + Rg * Rg;
+			if (delta2 >= 0.0) { 
+				float din = -r * mu - sqrt(delta2);
+				if (din >= 0.0) { 
+					dout = min(dout, din); 
+				} 
+			}
+			
+			return dout; 
+		}
 
 				#ifdef FIX_INSCATTER_SAMPLE
 						float fixU(float u) {
@@ -592,17 +647,7 @@
 			return miePhase_g.x / pow(miePhase_g.y - miePhase_g.z * mu, 1.5);
 		}
 
-				vec3 Transmittance(float r, float mu) {
-						float uR, uMu;
-						#ifdef TRANSMITTANCE_NON_LINEAR
-								uR = sqrt((r - Rg) / (Rt - Rg));
-								uMu = atan((mu + 0.15) / (1.0 + 0.15) * tan(1.5)) / 1.5;
-						#else
-								uR = (r - Rg) / (Rt - Rg);
-								uMu = (mu + 0.15) / (1.0 + 0.15);
-						#endif		
-						return texture2D(_Transmittance, vec2(uMu, uR)).rgb;
-				}
+				${TransmittanceLookup}
 
 				const vec3 EARTH_POS = vec3(0.0, 6360010.0, 0.0);
 				const float SUN_BRIGHTNESS = 40.0;
@@ -755,6 +800,7 @@ const float HM = 1.2;
 uniform vec4 betaR;
 const vec3 betaMSca = vec3(4e-3, 4e-3, 4e-3);
 const vec3 betaMEx = betaMSca / 0.9;
+const vec3 betaOzone = vec3(0.000650, 0.001881, 0.000085);
 
 // ---------------------------------------------------------------------------- 
 // NUMERICAL INTEGRATION PARAMETERS 
@@ -769,7 +815,7 @@ const vec3 betaMEx = betaMSca / 0.9;
 // PARAMETERIZATION OPTIONS 
 // ----------------------------------------------------------------------------
 
-#define TRANSMITTANCE_NON_LINEAR	
+#define TRANSMITTANCE_MAPPING 1
 #define INSCATTER_NON_LINEAR
 
 // ---------------------------------------------------------------------------- 
@@ -779,24 +825,106 @@ const vec3 betaMEx = betaMSca / 0.9;
 // nearest intersection of ray r, mu with ground or top atmosphere boundary 
 // mu = cos(ray zenith angle at ray origin) 
 float Limit(float r, float mu) { 
-		float dout = -r * mu + sqrt(r * r * (mu * mu - 1.0) + RL * RL); 
+		float dout = -r * mu + sqrt(r * r * (mu * mu - 1.0) + RL * RL);
+
 		float delta2 = r * r * (mu * mu - 1.0) + Rg * Rg;
-		
 		if (delta2 >= 0.0) { 
 				float din = -r * mu - sqrt(delta2);
 				if (din >= 0.0) { 
 						dout = min(dout, din); 
 				} 
-		} 
+		}
 		
 		return dout; 
 }
+`;
 
+	// ref https://ebruneton.github.io/precomputed_atmospheric_scattering
+	// ref https://www.shadertoy.com/view/DsBGWG
+	const TransmittanceCompute = `
+// total optical length of rayleigh or mie
+float OpticalDepth(float H, float r, float mu) {
+	float dx = Limit(r, mu) / float(TRANSMITTANCE_INTEGRAL_SAMPLES);
+	
+	float xi = 0.0;
+	float yi = exp(-(r - Rg) / H);
+	float result = 0.0; 
+	for (int i = 1; i <= TRANSMITTANCE_INTEGRAL_SAMPLES; ++i) {
+		float xj = float(i) * dx; 
+		float yj = exp(-(sqrt(r * r + xj * xj + 2.0 * xj * r * mu) - Rg) / H);
+		result += (yi + yj) / 2.0 * dx;
+		xi = xj;
+		yi = yj;
+	}
+	
+	return mu < -sqrt(1.0 - (Rg / r) * (Rg / r)) ? 1e9 : result; 
+}
+
+// total optical length of Ozone
+float OpticalDepth_O3(float r, float mu) {
+	float dx = Limit(r, mu) / float(TRANSMITTANCE_INTEGRAL_SAMPLES);
+
+	float result = 0.0;
+	for (int i = 0; i <= TRANSMITTANCE_INTEGRAL_SAMPLES; ++i) {
+		float d_i = float(i) * dx;
+		float r_i = sqrt(d_i * d_i + 2.0 * r * mu * d_i + r * r);
+		float height = r_i - Rg;
+		float linear_term = 0.0, constant_term = 0.0;
+		// 2 Ozone layers
+		linear_term = height < 25.0 ? 0.066667 : -0.066667;
+		constant_term = height < 25.0 ? -0.66667 : 2.666667;
+		float y_i = linear_term * height + constant_term;
+		y_i = clamp(y_i, 0.0, 1.0);
+		result += y_i * dx;
+	}
+	return result;
+}
+
+void GetRMuFromTransmittanceUv_new17(vec2 uv, out float r, out float mu) {
+	float H = sqrt(Rt * Rt - Rg * Rg);
+	float x_mu = uv.x;
+	float x_r = uv.y;
+	float rho = H * x_r;
+	r = sqrt(rho * rho + Rg * Rg);
+	float d_min = Rt - r;
+	float d_max = rho + H;
+	float d = d_min + x_mu * (d_max - d_min);
+	mu = d <= 0.0 ? float(1.0) : (H * H - rho * rho - d * d) / (2.0 * r * d);
+	mu = clamp(mu, -1.0, 1.0);
+}
+
+void GetRMuFromTransmittanceUv_original08(vec2 uv, out float r, out float mu) {
+	mu = -0.15 + tan(1.5 * uv.x) / tan(1.5) * (1.0 + 0.15);
+	r = Rg + (uv.y * uv.y) * (Rt - Rg);
+}
+
+void GetRMuFromTransmittanceUv_linear(vec2 uv, out float r, out float mu) {
+	mu = -0.15 + uv.x * (1.0 + 0.15);
+	r = Rg + uv.y * (Rt - Rg);
+}
+
+vec3 ComputeTransmittance(vec2 uv) {
+	float r, muS;
+	#if TRANSMITTANCE_MAPPING == 0
+		GetRMuFromTransmittanceUv_linear(uv, r, muS);
+	#elif TRANSMITTANCE_MAPPING == 1
+		GetRMuFromTransmittanceUv_original08(uv, r, muS);
+	#else
+		GetRMuFromTransmittanceUv_new17(uv, r, muS);
+	#endif
+
+	vec3 depth = betaR.xyz * OpticalDepth(HR, r, muS) + betaMEx * OpticalDepth(HM, r, muS);
+
+	#if TRANSMITTANCE_MAPPING == 2
+		depth += betaOzone * OpticalDepth_O3(r, muS);
+	#endif
+
+	return exp(-depth);
+}
 `;
 
 	const TransmittanceShader = {
 		name: 'sky_transmittance',
-		defines: {},
 		uniforms: {
 			betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1]
 		},
@@ -816,50 +944,12 @@ float Limit(float r, float mu) {
 		`,
 		fragmentShader: `
 				varying vec2 v_Uv;
-				
-				${AtmosphereCommon}
-				
-				// pixel shader entry point
-				// ---------------------------------------------------------------------------- 
-				// TRANSMITTANCE FUNCTIONS	 equ 2-6
-				// ----------------------------------------------------------------------------
 
-				float OpticalDepth(float H, float r, float mu) { 
-						float result = 0.0; 
-						float dx = Limit(r, mu) / float(TRANSMITTANCE_INTEGRAL_SAMPLES); 
-						float xi = 0.0; 
-						float yi = exp(-(r - Rg) / H); 
-						
-						for (int i = 1; i <= TRANSMITTANCE_INTEGRAL_SAMPLES; ++i) { 
-								float i_float = float(i);
-								float xj = i_float * dx; 
-								float yj = exp(-(sqrt(r * r + xj * xj + 2.0 * xj * r * mu) - Rg) / H);
-								result += (yi + yj) / 2.0 * dx;
-								xi = xj;
-								yi = yj; 
-						}
-						
-						return mu < -sqrt(1.0 - (Rg / r) * (Rg / r)) ? 1e9 : result; 
-				} 
-				
-				void GetTransmittanceRMu(vec2 coord, out float r, out float muS) { 
-						r = coord.y; 
-						muS = coord.x;
-						#ifdef TRANSMITTANCE_NON_LINEAR 
-								r = Rg + (r * r) * (Rt - Rg); 
-								muS = -0.15 + tan(1.5 * muS) / tan(1.5) * (1.0 + 0.15); 
-						#else
-								r = Rg + r * (Rt - Rg); 
-								muS = -0.15 + muS * (1.0 + 0.15);
-						#endif
-				}
-				
+				${AtmosphereCommon}
+		${TransmittanceCompute}
+
 				void main() {
-						float r, muS;
-						GetTransmittanceRMu(v_Uv, r, muS); 
-				
-						vec3 depth = betaR.xyz * OpticalDepth(HR, r, muS) + betaMEx * OpticalDepth(HM, r, muS); 
-						gl_FragColor = vec4(exp(-depth), 1.0); // Eq (5)
+						gl_FragColor = vec4(ComputeTransmittance(v_Uv), 1.0);
 				}
 		`
 	};
@@ -949,21 +1039,9 @@ float Limit(float r, float mu) {
 
 				// ---------------------------------------------------------------------------- 
 				// TRANSMITTANCE FUNCTIONS
-				// ---------------------------------------------------------------------------- 
-
-				// transmittance(=transparency) of atmosphere for infinite ray (r, mu)
-				// (mu = cos(view zenith angle)), intersections with ground ignored				
-				vec3 Transmittance(float r, float mu) {
-						float uR, uMu;
-						#ifdef TRANSMITTANCE_NON_LINEAR
-								uR = sqrt((r - Rg) / (Rt - Rg));
-								uMu = atan((mu + 0.15) / (1.0 + 0.15) * tan(1.5)) / 1.5;
-						#else
-								uR = (r - Rg) / (Rt - Rg);
-								uMu = (mu + 0.15) / (1.0 + 0.15);
-						#endif		
-						return texture2D(_Transmittance, vec2(uMu, uR)).rgb;
-				}
+				// ----------------------------------------------------------------------------
+		
+		${TransmittanceLookup}
 
 				// transmittance(=transparency) of atmosphere between x and x0
 				// assume segment x, x0 not intersecting ground 
@@ -1058,24 +1136,6 @@ float Limit(float r, float mu) {
 		`
 	};
 
-	function lerp(a, b, t) {
-		if (t <= 0) {
-			return a;
-		} else if (t >= 1) {
-			return b;
-		}
-		return a + (b - a) * t;
-	}
-	function clamp(x, min, max) {
-		if (x > max) {
-			return max;
-		}
-		if (x < min) {
-			return min;
-		}
-		return x;
-	}
-
 	class SkyPrecomputeUtil {
 		constructor(capabilities) {
 			const isWebGL2 = capabilities.version > 1;
@@ -1085,43 +1145,43 @@ float Limit(float r, float mu) {
 			let type;
 			if (isWebGL2) {
 				if (capabilities.getExtension('EXT_color_buffer_float') && capabilities.getExtension('OES_texture_float_linear') && !isIOS) {
-					type = t3d__namespace.PIXEL_TYPE.FLOAT;
+					type = t3d.PIXEL_TYPE.FLOAT;
 				} else {
-					type = t3d__namespace.PIXEL_TYPE.HALF_FLOAT;
+					type = t3d.PIXEL_TYPE.HALF_FLOAT;
 				}
 			} else {
 				if (capabilities.getExtension('OES_texture_float') && capabilities.getExtension('OES_texture_float_linear') && !isIOS) {
-					type = t3d__namespace.PIXEL_TYPE.FLOAT;
+					type = t3d.PIXEL_TYPE.FLOAT;
 				} else if (capabilities.getExtension('OES_texture_half_float') && capabilities.getExtension('OES_texture_half_float_linear')) {
-					type = t3d__namespace.PIXEL_TYPE.HALF_FLOAT;
+					type = t3d.PIXEL_TYPE.HALF_FLOAT;
 				} else {
-					type = t3d__namespace.PIXEL_TYPE.UNSIGNED_BYTE;
+					type = t3d.PIXEL_TYPE.UNSIGNED_BYTE;
 					console.warn('Half float texture is not supported!');
 				}
 			}
 
 			// Render targets
 
-			const transmittanceRT = new t3d__namespace.RenderTarget2D(256, 64);
-			transmittanceRT.texture.minFilter = t3d__namespace.TEXTURE_FILTER.LINEAR;
-			transmittanceRT.texture.magFilter = t3d__namespace.TEXTURE_FILTER.LINEAR;
+			const transmittanceRT = new t3d.RenderTarget2D(256, 64);
+			transmittanceRT.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
+			transmittanceRT.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
 			transmittanceRT.texture.type = type;
-			transmittanceRT.texture.format = t3d__namespace.PIXEL_FORMAT.RGBA;
+			transmittanceRT.texture.format = t3d.PIXEL_FORMAT.RGBA;
 			transmittanceRT.texture.generateMipmaps = false;
-			const inscatterRT = new t3d__namespace.RenderTarget2D(512, 512);
-			inscatterRT.texture.minFilter = t3d__namespace.TEXTURE_FILTER.LINEAR;
-			inscatterRT.texture.magFilter = t3d__namespace.TEXTURE_FILTER.LINEAR;
+			const inscatterRT = new t3d.RenderTarget2D(512, 512);
+			inscatterRT.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
+			inscatterRT.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
 			inscatterRT.texture.type = type;
-			inscatterRT.texture.format = t3d__namespace.PIXEL_FORMAT.RGBA;
+			inscatterRT.texture.format = t3d.PIXEL_FORMAT.RGBA;
 			inscatterRT.texture.generateMipmaps = false;
 
 			// Render Passes
 
 			const betaR = [5.8e-3, 1.35e-2, 3.31e-2, 1]; // default betaR
 
-			const transmittancePass = new t3d__namespace.ShaderPostPass(TransmittanceShader);
+			const transmittancePass = new t3d.ShaderPostPass(TransmittanceShader);
 			transmittancePass.uniforms.betaR = betaR;
-			const inscatterPass = new t3d__namespace.ShaderPostPass(InscatterShader);
+			const inscatterPass = new t3d.ShaderPostPass(InscatterShader);
 			inscatterPass.uniforms._Transmittance = transmittanceRT.texture;
 			inscatterPass.uniforms.betaR = betaR;
 
@@ -1154,12 +1214,12 @@ float Limit(float r, float mu) {
 			renderer.clear(true, true, true);
 			this._inscatterPass.render(renderer);
 		}
-		setBetaRayleighDensity(Wavelengths, SkyTint, AtmosphereThickness) {
+		setBetaRayleighDensity(wavelengths, skyTint, atmosphereThickness) {
 			// Sky Tint shifts the value of Wavelengths
-			const variableRangeWavelengths = _vec3_1.set(lerp(Wavelengths.x + 150, Wavelengths.x - 150, SkyTint.r), lerp(Wavelengths.y + 150, Wavelengths.y - 150, SkyTint.g), lerp(Wavelengths.z + 150, Wavelengths.z - 150, SkyTint.b));
-			variableRangeWavelengths.x = clamp(variableRangeWavelengths.x, 380, 780);
-			variableRangeWavelengths.y = clamp(variableRangeWavelengths.y, 380, 780);
-			variableRangeWavelengths.z = clamp(variableRangeWavelengths.z, 380, 780);
+			const variableRangeWavelengths = _vec3_1.set(t3d.MathUtils.lerp(wavelengths.x + 150, wavelengths.x - 150, skyTint.r), t3d.MathUtils.lerp(wavelengths.y + 150, wavelengths.y - 150, skyTint.g), t3d.MathUtils.lerp(wavelengths.z + 150, wavelengths.z - 150, skyTint.b));
+			variableRangeWavelengths.x = t3d.MathUtils.clamp(variableRangeWavelengths.x, 380, 780);
+			variableRangeWavelengths.y = t3d.MathUtils.clamp(variableRangeWavelengths.y, 380, 780);
+			variableRangeWavelengths.z = t3d.MathUtils.clamp(variableRangeWavelengths.z, 380, 780);
 
 			// Evaluate Beta Rayleigh function is based on A.J.Preetham
 
@@ -1176,20 +1236,38 @@ float Limit(float r, float mu) {
 
 			// Atmosphere Thickness ( Rayleigh ) scale
 			const Km = 1000.0; // kilo meter unit
-			betaR.multiplyScalar(Km * AtmosphereThickness);
+			betaR.multiplyScalar(Km * atmosphereThickness);
 
 			// w channel solves the Rayleigh Offset artifact issue
 			this._betaR[0] = betaR.x;
 			this._betaR[1] = betaR.y;
 			this._betaR[2] = betaR.z;
-			this._betaR[3] = Math.max(Math.pow(AtmosphereThickness, Math.PI), 1);
+			this._betaR[3] = Math.max(Math.pow(atmosphereThickness, Math.PI), 1);
 
 			// w channel solves the Rayleigh Offset artifact issue
 			return this._betaR;
 		}
 	}
-	const _vec3_1 = new t3d__namespace.Vector3();
-	const _vec3_2 = new t3d__namespace.Vector3();
+	const _vec3_1 = new t3d.Vector3();
+	const _vec3_2 = new t3d.Vector3();
+
+	function lerp(a, b, t) {
+		if (t <= 0) {
+			return a;
+		} else if (t >= 1) {
+			return b;
+		}
+		return a + (b - a) * t;
+	}
+	function clamp(x, min, max) {
+		if (x > max) {
+			return max;
+		}
+		if (x < min) {
+			return min;
+		}
+		return x;
+	}
 
 	class SkyTimeline {
 		constructor(options) {

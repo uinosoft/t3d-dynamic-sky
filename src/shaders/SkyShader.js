@@ -1,3 +1,4 @@
+import { AtmosphereCommon } from './chunks/AtmosphereCommon.js';
 import { TransmittanceLookup } from './chunks/TransmittanceLookup.js';
 
 export const SkyShader = {
@@ -135,8 +136,6 @@ export const SkyShader = {
 
         uniform float _SkyExposure;
 
-        uniform vec4 betaR;
-
         varying vec4 vWorldPosAndCamY;
         varying vec3 vMiePhase_g;
         varying vec3 vSun_g;
@@ -147,29 +146,7 @@ export const SkyShader = {
         const float Rt = 6420000.0;
         const float RL = 6421000.0;
 
-        const float RES_R = 4.; 	// 3D texture depth
-        const float RES_MU = 128.; 	// height of the texture
-        const float RES_MU_S = 32.; // width per table
-        const float RES_NU = 8.;	// table per texture depth
-
-        #define TRANSMITTANCE_MAPPING 1
-        #define INSCATTER_NON_LINEAR
-
-		// nearest intersection of ray r, mu with ground or top atmosphere boundary 
-		// mu = cos(ray zenith angle at ray origin) 
-		float Limit(float r, float mu) { 
-			float dout = -r * mu + sqrt(r * r * (mu * mu - 1.0) + RL * RL);
-
-			float delta2 = r * r * (mu * mu - 1.0) + Rg * Rg;
-			if (delta2 >= 0.0) { 
-				float din = -r * mu - sqrt(delta2);
-				if (din >= 0.0) { 
-					dout = min(dout, din); 
-				} 
-			}
-			
-			return dout; 
-		}
+		${AtmosphereCommon}
 
         #ifdef FIX_INSCATTER_SAMPLE
             float fixU(float u) {

@@ -1,35 +1,23 @@
 export const AtmosphereCommon = `
-
-// The radius of the planet (Rg), radius of the atmosphere (Rt),  atmosphere limit (RL)
-const float Rg = 6360.0;
-const float Rt = 6420.0;
-const float RL = 6421.0;
-
-// Half heights for the atmosphere air density (HR) and particle density (HM)
-// This is the height in km that half the particles are found below
-const float HR = 8.0;
-const float HM = 1.2;
-
 // const vec3 betaR = vec3(5.8e-3, 1.35e-2, 3.31e-2);
 uniform vec4 betaR;
-const vec3 betaMSca = vec3(4e-3, 4e-3, 4e-3);
-const vec3 betaMEx = betaMSca / 0.9;
-const vec3 betaOzone = vec3(0.000650, 0.001881, 0.000085);
 
-// ---------------------------------------------------------------------------- 
-// NUMERICAL INTEGRATION PARAMETERS 
-// ----------------------------------------------------------------------------
-
-// default Transmittance sample is 500, less then 250 sample will fit in SM 3.0 for dx9,
-#define TRANSMITTANCE_INTEGRAL_SAMPLES 50
-//default Inscatter sample is 50
-#define INSCATTER_INTEGRAL_SAMPLES 25
+const float RES_R_TOTAL = 32.; // all altitude layer
+const float RES_R = 4.; 	// 3D texture depth
+const float RES_MU = 128.; 	// height of the texture
+const float RES_MU_S = 32.; // width per table
+const float RES_NU = 8.;	// table per texture depth
 
 // ---------------------------------------------------------------------------- 
 // PARAMETERIZATION OPTIONS 
 // ----------------------------------------------------------------------------
 
+// Transmittance mapping
+// 0 - linear implementation
+// 1 - original implementation in 2008
+// 2 - new implementation in 2017
 #define TRANSMITTANCE_MAPPING 1
+
 #define INSCATTER_NON_LINEAR
 
 // ---------------------------------------------------------------------------- 

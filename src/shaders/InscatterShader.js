@@ -1,4 +1,5 @@
 import { AtmosphereCommon } from './chunks/AtmosphereCommon.js';
+import { PrecomputeCommon } from './chunks/PrecomputeCommon.js';
 import { TransmittanceLookup } from './chunks/TransmittanceLookup.js';
 
 export const InscatterShader = {
@@ -27,12 +28,8 @@ export const InscatterShader = {
 
         varying vec2 v_Uv;
 
+		${PrecomputeCommon}
         ${AtmosphereCommon}
-        
-        const float RES_R = 4.; 	// 3D texture depth
-        const float RES_MU = 128.; 	// height of the texture
-        const float RES_MU_S = 32.; // width per table
-        const float RES_NU = 8.;	// table per texture depth
 
         const float epsion = 0.000000001;
         
@@ -69,9 +66,6 @@ export const InscatterShader = {
         
         // UE4 AtmosphereRendering.cpp
         void GetLayer(float layer, out float r, out vec4 dhdH) {
-            // Assign the total depth constant for "RES_R" altitude layer setting.
-            const float RES_R_TOTAL = 32.;
-            
             r = float(layer) / max((RES_R_TOTAL - 1.0), 1.0);
             r = r * r;
             r = sqrt(Rg * Rg + r * (Rt * Rt - Rg * Rg)) + (abs(layer - 0.) < epsion ? 0.01 : (abs(layer - RES_R_TOTAL + 1.) < epsion ? -0.001 : 0.0));

@@ -50,8 +50,13 @@
 		// console.log(skyPrecomputeUtil.setBetaRayleighDensity(new t3d.Vector3(680, 550, 440), new t3d.Color3(128 / 255, 128 / 255, 128 / 255, 255 / 255), 1.0));
 		// [0.05952087360787257, 0.05952087360787257, 0.05952087360787257, 1];
 
+		console.time('computeTransmittance');
 		skyPrecomputeUtil.computeTransmittance(renderer);
+		console.timeEnd('computeTransmittance');
+
+		console.time('computeInscatter');
 		skyPrecomputeUtil.computeInscatter(renderer);
+		console.timeEnd('computeInscatter');
 
 		const scene = new t3d.Scene();
 

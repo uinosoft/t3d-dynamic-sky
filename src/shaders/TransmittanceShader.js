@@ -1,4 +1,5 @@
 import { AtmosphereCommon } from './chunks/AtmosphereCommon.js';
+import { PrecomputeCommon } from './chunks/PrecomputeCommon.js';
 import { TransmittanceCompute } from './chunks/TransmittanceCompute.js';
 
 export const TransmittanceShader = {
@@ -23,6 +24,7 @@ export const TransmittanceShader = {
 	fragmentShader: `
         varying vec2 v_Uv;
 
+		${PrecomputeCommon}
         ${AtmosphereCommon}
 		${TransmittanceCompute}
 

@@ -39,38 +39,35 @@ float OpticalDepth_O3(float r, float mu) {
 	return result;
 }
 
-void GetRMuFromTransmittanceUv_new17(vec2 uv, out float r, out float mu) {
-	float H = sqrt(Rt * Rt - Rg * Rg);
-	float x_mu = uv.x;
-	float x_r = uv.y;
-	float rho = H * x_r;
-	r = sqrt(rho * rho + Rg * Rg);
-	float d_min = Rt - r;
-	float d_max = rho + H;
-	float d = d_min + x_mu * (d_max - d_min);
-	mu = d <= 0.0 ? float(1.0) : (H * H - rho * rho - d * d) / (2.0 * r * d);
-	mu = clamp(mu, -1.0, 1.0);
-}
-
-void GetRMuFromTransmittanceUv_original08(vec2 uv, out float r, out float mu) {
-	mu = -0.15 + tan(1.5 * uv.x) / tan(1.5) * (1.0 + 0.15);
-	r = Rg + (uv.y * uv.y) * (Rt - Rg);
-}
-
-void GetRMuFromTransmittanceUv_linear(vec2 uv, out float r, out float mu) {
-	mu = -0.15 + uv.x * (1.0 + 0.15);
-	r = Rg + uv.y * (Rt - Rg);
-}
+#if TRANSMITTANCE_MAPPING == 0
+	void GetRMuFromTransmittanceUv(vec2 uv, out float r, out float mu) {
+		mu = -0.15 + uv.x * (1.0 + 0.15);
+		r = Rg + uv.y * (Rt - Rg);
+	}
+#elif TRANSMITTANCE_MAPPING == 1
+	void GetRMuFromTransmittanceUv(vec2 uv, out float r, out float mu) {
+		mu = -0.15 + tan(1.5 * uv.x) / tan(1.5) * (1.0 + 0.15);
+		r = Rg + (uv.y * uv.y) * (Rt - Rg);
+	}
+#else
+	void GetRMuFromTransmittanceUv(vec2 uv, out float r, out float mu) {
+		float H = sqrt(Rt * Rt - Rg * Rg);
+		float x_mu = uv.x;
+		float x_r = uv.y;
+		float rho = H * x_r;
+		r = sqrt(rho * rho + Rg * Rg);
+		float d_min = Rt - r;
+		float d_max = rho + H;
+		float d = d_min + x_mu * (d_max - d_min);
+		mu = d <= 0.0 ? float(1.0) : (H * H - rho * rho - d * d) / (2.0 * r * d);
+		mu = clamp(mu, -1.0, 1.0);
+	}
+#endif
 
 vec3 ComputeTransmittance(vec2 uv) {
 	float r, muS;
-	#if TRANSMITTANCE_MAPPING == 0
-		GetRMuFromTransmittanceUv_linear(uv, r, muS);
-	#elif TRANSMITTANCE_MAPPING == 1
-		GetRMuFromTransmittanceUv_original08(uv, r, muS);
-	#else
-		GetRMuFromTransmittanceUv_new17(uv, r, muS);
-	#endif
+
+	GetRMuFromTransmittanceUv(uv, r, muS);
 
 	vec3 depth = betaR.xyz * OpticalDepth(HR, r, muS) + betaMEx * OpticalDepth(HM, r, muS);
 

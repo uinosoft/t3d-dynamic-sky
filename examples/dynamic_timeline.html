@@ -65,7 +65,7 @@
 
 		const camera = new t3d.Camera();
 		camera.setPerspective(70 / 180 * Math.PI, width / height, 0.01, 1000);
-		camera.position.set(0, 0.5, 10);
+		camera.position.set(-10, 0.5, 0);
 		scene.add(camera);
 
 		const sphere_geometry = new t3d.SphereGeometry(0.5, 20, 20);
@@ -173,7 +173,7 @@
 
 					skyTimeline._sunAndMoon.sunEquatorOffset = 60;
 					skyTimeline._lightExposure = 0.5;
-					skyTimeline.timeline = 14;
+					skyTimeline.timeline = 6.3; // 14;
 
 					initGUI(skyTimeline);
 				};

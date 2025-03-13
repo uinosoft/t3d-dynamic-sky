@@ -2815,41 +2815,80 @@ const starsShader = {
     `
 };
 
+const AtmosphereCommon = `
+// const vec3 betaR = vec3(5.8e-3, 1.35e-2, 3.31e-2);
+uniform vec4 betaR;
+
+const float RES_R_TOTAL = 32.; // all altitude layer
+const float RES_R = 4.; 	// 3D texture depth
+const float RES_MU = 128.; 	// height of the texture
+const float RES_MU_S = 32.; // width per table
+const float RES_NU = 8.;	// table per texture depth
+
+// ---------------------------------------------------------------------------- 
+// PARAMETERIZATION OPTIONS 
+// ----------------------------------------------------------------------------
+
+// Transmittance mapping
+// 0 - linear implementation
+// 1 - original implementation in 2008
+// 2 - new implementation in 2017
+#define TRANSMITTANCE_MAPPING 1
+
+#define INSCATTER_NON_LINEAR
+
+// ---------------------------------------------------------------------------- 
+// UTILITY FUNCTIONS
+// ---------------------------------------------------------------------------- 
+
+// nearest intersection of ray r, mu with ground or top atmosphere boundary 
+// mu = cos(ray zenith angle at ray origin) 
+float Limit(float r, float mu) { 
+    float dout = -r * mu + sqrt(r * r * (mu * mu - 1.0) + RL * RL);
+
+    float delta2 = r * r * (mu * mu - 1.0) + Rg * Rg;
+    if (delta2 >= 0.0) { 
+        float din = -r * mu - sqrt(delta2);
+        if (din >= 0.0) { 
+            dout = min(dout, din); 
+        } 
+    }
+    
+    return dout; 
+}
+`;
+
 // ref https://ebruneton.github.io/precomputed_atmospheric_scattering
 const TransmittanceLookup = `
-vec2 GetTransmittanceUvFromRMu_new17(float r, float mu) {
-	float H = sqrt(Rt * Rt - Rg * Rg);
-	float rho = sqrt(r * r - Rg * Rg);
-	float d = Limit(r, mu);
-	float d_min = Rt - r;
-	float d_max = rho + H;
-	float x_mu = (d - d_min) / (d_max - d_min);
-	float x_r = rho / H;
-	return vec2(x_mu, x_r);
-}
-
-vec2 GetTransmittanceUvFromRMu_original08(float r, float mu) {
-	float u = atan((mu + 0.15) / (1.0 + 0.15) * tan(1.5)) / 1.5;
-	float v = sqrt((r - Rg) / (Rt - Rg));
-	return vec2(u, v);
-}
-
-vec2 GetRMuFromTransmittanceUv_linear(float r, float mu) {
-	float u = (mu + 0.15) / (1.0 + 0.15);
-	float v = (r - Rg) / (Rt - Rg);
-	return vec2(u, v);
-}
+#if TRANSMITTANCE_MAPPING == 0
+	vec2 GetTransmittanceUvFromRMu(float r, float mu) {
+		float u = (mu + 0.15) / (1.0 + 0.15);
+		float v = (r - Rg) / (Rt - Rg);
+		return vec2(u, v);
+	}
+#elif TRANSMITTANCE_MAPPING == 1
+	vec2 GetTransmittanceUvFromRMu(float r, float mu) {
+		float u = atan((mu + 0.15) / (1.0 + 0.15) * tan(1.5)) / 1.5;
+		float v = sqrt((r - Rg) / (Rt - Rg));
+		return vec2(u, v);
+	}
+#else
+	vec2 GetTransmittanceUvFromRMu(float r, float mu) {
+		float H = sqrt(Rt * Rt - Rg * Rg);
+		float rho = sqrt(r * r - Rg * Rg);
+		float d = Limit(r, mu);
+		float d_min = Rt - r;
+		float d_max = rho + H;
+		float x_mu = (d - d_min) / (d_max - d_min);
+		float x_r = rho / H;
+		return vec2(x_mu, x_r);
+	}
+#endif
 
 // transmittance(=transparency) of atmosphere for infinite ray (r, mu)
 // (mu = cos(view zenith angle)), intersections with ground ignored
 vec3 Transmittance(float r, float mu) {
-	#if TRANSMITTANCE_MAPPING == 0
-		vec2 uv = GetRMuFromTransmittanceUv_linear(r, mu);
-	#elif TRANSMITTANCE_MAPPING == 1
-		vec2 uv = GetTransmittanceUvFromRMu_original08(r, mu);
-	#else
-		vec2 uv = GetTransmittanceUvFromRMu_new17(r, mu);
-	#endif
+	vec2 uv = GetTransmittanceUvFromRMu(r, mu);
 	return texture2D(_Transmittance, uv).rgb;
 }
 `;
@@ -2989,8 +3028,6 @@ const SkyShader = {
 
         uniform float _SkyExposure;
 
-        uniform vec4 betaR;
-
         varying vec4 vWorldPosAndCamY;
         varying vec3 vMiePhase_g;
         varying vec3 vSun_g;
@@ -3001,29 +3038,7 @@ const SkyShader = {
         const float Rt = 6420000.0;
         const float RL = 6421000.0;
 
-        const float RES_R = 4.; 	// 3D texture depth
-        const float RES_MU = 128.; 	// height of the texture
-        const float RES_MU_S = 32.; // width per table
-        const float RES_NU = 8.;	// table per texture depth
-
-        #define TRANSMITTANCE_MAPPING 1
-        #define INSCATTER_NON_LINEAR
-
-		// nearest intersection of ray r, mu with ground or top atmosphere boundary 
-		// mu = cos(ray zenith angle at ray origin) 
-		float Limit(float r, float mu) { 
-			float dout = -r * mu + sqrt(r * r * (mu * mu - 1.0) + RL * RL);
-
-			float delta2 = r * r * (mu * mu - 1.0) + Rg * Rg;
-			if (delta2 >= 0.0) { 
-				float din = -r * mu - sqrt(delta2);
-				if (din >= 0.0) { 
-					dout = min(dout, din); 
-				} 
-			}
-			
-			return dout; 
-		}
+		${AtmosphereCommon}
 
         #ifdef FIX_INSCATTER_SAMPLE
             float fixU(float u) {
@@ -3252,8 +3267,7 @@ class Sky extends t3d.Mesh {
 
 }
 
-const AtmosphereCommon = `
-
+const PrecomputeCommon = `
 // The radius of the planet (Rg), radius of the atmosphere (Rt),  atmosphere limit (RL)
 const float Rg = 6360.0;
 const float Rt = 6420.0;
@@ -3264,8 +3278,6 @@ const float RL = 6421.0;
 const float HR = 8.0;
 const float HM = 1.2;
 
-// const vec3 betaR = vec3(5.8e-3, 1.35e-2, 3.31e-2);
-uniform vec4 betaR;
 const vec3 betaMSca = vec3(4e-3, 4e-3, 4e-3);
 const vec3 betaMEx = betaMSca / 0.9;
 const vec3 betaOzone = vec3(0.000650, 0.001881, 0.000085);
@@ -3278,33 +3290,6 @@ const vec3 betaOzone = vec3(0.000650, 0.001881, 0.000085);
 #define TRANSMITTANCE_INTEGRAL_SAMPLES 50
 //default Inscatter sample is 50
 #define INSCATTER_INTEGRAL_SAMPLES 25
-
-// ---------------------------------------------------------------------------- 
-// PARAMETERIZATION OPTIONS 
-// ----------------------------------------------------------------------------
-
-#define TRANSMITTANCE_MAPPING 1
-#define INSCATTER_NON_LINEAR
-
-// ---------------------------------------------------------------------------- 
-// UTILITY FUNCTIONS
-// ---------------------------------------------------------------------------- 
-
-// nearest intersection of ray r, mu with ground or top atmosphere boundary 
-// mu = cos(ray zenith angle at ray origin) 
-float Limit(float r, float mu) { 
-    float dout = -r * mu + sqrt(r * r * (mu * mu - 1.0) + RL * RL);
-
-    float delta2 = r * r * (mu * mu - 1.0) + Rg * Rg;
-    if (delta2 >= 0.0) { 
-        float din = -r * mu - sqrt(delta2);
-        if (din >= 0.0) { 
-            dout = min(dout, din); 
-        } 
-    }
-    
-    return dout; 
-}
 `;
 
 // ref https://ebruneton.github.io/precomputed_atmospheric_scattering
@@ -3348,38 +3333,35 @@ float OpticalDepth_O3(float r, float mu) {
 	return result;
 }
 
-void GetRMuFromTransmittanceUv_new17(vec2 uv, out float r, out float mu) {
-	float H = sqrt(Rt * Rt - Rg * Rg);
-	float x_mu = uv.x;
-	float x_r = uv.y;
-	float rho = H * x_r;
-	r = sqrt(rho * rho + Rg * Rg);
-	float d_min = Rt - r;
-	float d_max = rho + H;
-	float d = d_min + x_mu * (d_max - d_min);
-	mu = d <= 0.0 ? float(1.0) : (H * H - rho * rho - d * d) / (2.0 * r * d);
-	mu = clamp(mu, -1.0, 1.0);
-}
-
-void GetRMuFromTransmittanceUv_original08(vec2 uv, out float r, out float mu) {
-	mu = -0.15 + tan(1.5 * uv.x) / tan(1.5) * (1.0 + 0.15);
-	r = Rg + (uv.y * uv.y) * (Rt - Rg);
-}
-
-void GetRMuFromTransmittanceUv_linear(vec2 uv, out float r, out float mu) {
-	mu = -0.15 + uv.x * (1.0 + 0.15);
-	r = Rg + uv.y * (Rt - Rg);
-}
+#if TRANSMITTANCE_MAPPING == 0
+	void GetRMuFromTransmittanceUv(vec2 uv, out float r, out float mu) {
+		mu = -0.15 + uv.x * (1.0 + 0.15);
+		r = Rg + uv.y * (Rt - Rg);
+	}
+#elif TRANSMITTANCE_MAPPING == 1
+	void GetRMuFromTransmittanceUv(vec2 uv, out float r, out float mu) {
+		mu = -0.15 + tan(1.5 * uv.x) / tan(1.5) * (1.0 + 0.15);
+		r = Rg + (uv.y * uv.y) * (Rt - Rg);
+	}
+#else
+	void GetRMuFromTransmittanceUv(vec2 uv, out float r, out float mu) {
+		float H = sqrt(Rt * Rt - Rg * Rg);
+		float x_mu = uv.x;
+		float x_r = uv.y;
+		float rho = H * x_r;
+		r = sqrt(rho * rho + Rg * Rg);
+		float d_min = Rt - r;
+		float d_max = rho + H;
+		float d = d_min + x_mu * (d_max - d_min);
+		mu = d <= 0.0 ? float(1.0) : (H * H - rho * rho - d * d) / (2.0 * r * d);
+		mu = clamp(mu, -1.0, 1.0);
+	}
+#endif
 
 vec3 ComputeTransmittance(vec2 uv) {
 	float r, muS;
-	#if TRANSMITTANCE_MAPPING == 0
-		GetRMuFromTransmittanceUv_linear(uv, r, muS);
-	#elif TRANSMITTANCE_MAPPING == 1
-		GetRMuFromTransmittanceUv_original08(uv, r, muS);
-	#else
-		GetRMuFromTransmittanceUv_new17(uv, r, muS);
-	#endif
+
+	GetRMuFromTransmittanceUv(uv, r, muS);
 
 	vec3 depth = betaR.xyz * OpticalDepth(HR, r, muS) + betaMEx * OpticalDepth(HM, r, muS);
 
@@ -3413,6 +3395,7 @@ const TransmittanceShader = {
 	fragmentShader: `
         varying vec2 v_Uv;
 
+		${PrecomputeCommon}
         ${AtmosphereCommon}
 		${TransmittanceCompute}
 
@@ -3448,12 +3431,8 @@ const InscatterShader = {
 
         varying vec2 v_Uv;
 
+		${PrecomputeCommon}
         ${AtmosphereCommon}
-        
-        const float RES_R = 4.; 	// 3D texture depth
-        const float RES_MU = 128.; 	// height of the texture
-        const float RES_MU_S = 32.; // width per table
-        const float RES_NU = 8.;	// table per texture depth
 
         const float epsion = 0.000000001;
         
@@ -3490,9 +3469,6 @@ const InscatterShader = {
         
         // UE4 AtmosphereRendering.cpp
         void GetLayer(float layer, out float r, out vec4 dhdH) {
-            // Assign the total depth constant for "RES_R" altitude layer setting.
-            const float RES_R_TOTAL = 32.;
-            
             r = float(layer) / max((RES_R_TOTAL - 1.0), 1.0);
             r = r * r;
             r = sqrt(Rg * Rg + r * (Rt * Rt - Rg * Rg)) + (abs(layer - 0.) < epsion ? 0.01 : (abs(layer - RES_R_TOTAL + 1.) < epsion ? -0.001 : 0.0));

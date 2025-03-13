@@ -998,20 +998,6 @@ vec3 ComputeTransmittance(vec2 uv) {
 								nu = -1.0 + floor(x / float(RES_MU_S)) / (float(RES_NU) - 1.0) * 2.0;
 						#endif 
 				}
-				
-				// UE4 AtmosphereRendering.cpp
-				void GetLayer(float layer, out float r, out vec4 dhdH) {
-						r = float(layer) / max((RES_R_TOTAL - 1.0), 1.0);
-						r = r * r;
-						r = sqrt(Rg * Rg + r * (Rt * Rt - Rg * Rg)) + (abs(layer - 0.) < epsion ? 0.01 : (abs(layer - RES_R_TOTAL + 1.) < epsion ? -0.001 : 0.0));
-						
-						float dmin = Rt - r;
-						float dmax = sqrt(r * r - Rg * Rg) + sqrt(Rt * Rt - Rg * Rg);
-						float dminp = r - Rg;
-						float dmaxp = sqrt(r * r - Rg * Rg);
-				
-						dhdH = vec4(dmin, dmax, dminp, dmaxp);	
-				}
 
 				// ---------------------------------------------------------------------------- 
 				// TRANSMITTANCE FUNCTIONS
@@ -1080,29 +1066,47 @@ vec3 ComputeTransmittance(vec2 uv) {
 				} 
 				
 				void main() {
-						vec3 ray;
-						float mie; // only calc the red channel
-						vec4 dhdH;
-						float mu, muS, nu, r;
-				
 						vec2 coords = v_Uv; // range 0 ~ 1.
 
-						vec3 uvLayer;
+			vec2 uv;
+			float layer;
 
-						if (RES_R > 3.) {
-								// hard coded to split the depth to 4 layer
-								// Texture size = 256 x 512
-								uvLayer = coords.y > 0.75 ? vec3(coords.x, coords.y * RES_R - 3., 8.) : // 16. ? atmosphere level layer
-										coords.y > 0.5 ? vec3(coords.x, coords.y * RES_R - 2., 4.) :
-										coords.y > 0.25 ? vec3(coords.x, coords.y * RES_R - 1., 2.) :
-																		vec3(coords.x, coords.y * RES_R, 0.); // ground level layer
+						if (RES_R > 1.) {
+				float layerHeight = 1. / RES_R;
+
+				float layerIndex = floor(coords.y * RES_R);
+				layerIndex = clamp(layerIndex, 0., RES_R - 1.);
+
+				uv.x = coords.x;
+				uv.y = coords.y * RES_R - layerIndex;
+				uv.y = clamp(uv.y, 0., 1.);
+
+				layer = pow(2., layerIndex);
+
+				if (layerIndex < 0.5) {
+					layer = 0.0;
+				}
 						} else {
-								// One layer only, Texture size is 256 x 128
-								uvLayer = vec3(coords, 1.); // 2. ?
-						} 
+				uv = coords;
+				layer = 1.;
+						}
+
+			float r = layer / max((RES_R_TOTAL - 1.0), 1.0);
+						r = r * r;
+						r = sqrt(Rg * Rg + r * (Rt * Rt - Rg * Rg)) + (abs(layer - 0.) < epsion ? 0.01 : (abs(layer - (RES_R_TOTAL - 1.)) < epsion ? -0.001 : 0.0));
+						
+						float dmin = Rt - r;
+						float dmax = sqrt(r * r - Rg * Rg) + sqrt(Rt * Rt - Rg * Rg);
+						float dminp = r - Rg;
+						float dmaxp = sqrt(r * r - Rg * Rg);
 				
-						GetLayer(uvLayer.z, r, dhdH); 
-						GetMuMuSNu(uvLayer.xy, r, dhdH, mu, muS, nu); 
+						vec4 dhdH = vec4(dmin, dmax, dminp, dmaxp);
+
+			vec3 ray;
+						float mie; // only calc the red channel
+						float mu, muS, nu;
+
+						GetMuMuSNu(uv, r, dhdH, mu, muS, nu); 
 				
 						Inscatter(r, mu, muS, nu, ray, mie); 
 						

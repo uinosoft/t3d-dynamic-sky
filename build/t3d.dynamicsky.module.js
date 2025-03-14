@@ -1,6 +1,6 @@
 // t3d-dynamic-sky
 import * as t3d from 't3d';
-import { Vector3, Vector4, Mesh, ShaderMaterial, BLEND_TYPE, DRAW_MODE, Geometry, Attribute, Buffer, PIXEL_TYPE, RenderTarget2D, TEXTURE_FILTER, PIXEL_FORMAT, ShaderPostPass, MathUtils } from 't3d';
+import { Vector3, Vector4, Mesh, ShaderMaterial, BLEND_TYPE, DRAW_MODE, Geometry, Attribute, Buffer, PIXEL_TYPE, RenderTarget2D, TEXTURE_FILTER, PIXEL_FORMAT, RenderTarget3D, ShaderPostPass, MathUtils } from 't3d';
 
 const SkyDomeData = {
 	vertices: [
@@ -3410,7 +3410,8 @@ const InscatterShader = {
 	defines: {},
 	uniforms: {
 		_Transmittance: null,
-		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1]
+		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
+		layer: 0
 	},
 	vertexShader: `
         attribute vec3 a_Position;
@@ -3427,12 +3428,16 @@ const InscatterShader = {
         }
     `,
 	fragmentShader: `
-        uniform sampler2D _Transmittance;
-
-        varying vec2 v_Uv;
-
 		${PrecomputeCommon}
         ${AtmosphereCommon}
+
+		uniform sampler2D _Transmittance;
+
+		#ifdef INSCATTER_3D
+			uniform float layer;
+		#endif
+
+        varying vec2 v_Uv;
 
         const float epsion = 0.000000001;
         
@@ -3534,30 +3539,25 @@ const InscatterShader = {
         } 
         
         void main() {
-            vec2 coords = v_Uv; // range 0 ~ 1.
+			vec2 uv = v_Uv;
 
-			vec2 uv;
-			float layer;
+			#ifndef INSCATTER_3D
+				float layer;
+				if (RES_R > 1.) {
+					float layerIndex = floor(uv.y * RES_R);
+					layerIndex = clamp(layerIndex, 0., RES_R - 1.);
+					layer = pow(2., layerIndex);
 
-            if (RES_R > 1.) {
-				float layerHeight = 1. / RES_R;
+					uv.y = uv.y * RES_R - layerIndex;
+					uv.y = clamp(uv.y, 0., 1.);
 
-				float layerIndex = floor(coords.y * RES_R);
-				layerIndex = clamp(layerIndex, 0., RES_R - 1.);
-
-				uv.x = coords.x;
-				uv.y = coords.y * RES_R - layerIndex;
-				uv.y = clamp(uv.y, 0., 1.);
-
-				layer = pow(2., layerIndex);
-
-				if (layerIndex < 0.5) {
-					layer = 0.0;
+					if (layerIndex < 0.5) {
+						layer = 0.0;
+					}
+				} else {
+					layer = 1.;
 				}
-            } else {
-				uv = coords;
-				layer = 1.;
-            }
+			#endif
 
 			float r = layer / max((RES_R_TOTAL - 1.0), 1.0);
             r = r * r;
@@ -3569,13 +3569,12 @@ const InscatterShader = {
             float dmaxp = sqrt(r * r - Rg * Rg);
         
             vec4 dhdH = vec4(dmin, dmax, dminp, dmaxp);
+			
+            float mu, muS, nu;
+            GetMuMuSNu(uv, r, dhdH, mu, muS, nu);
 
 			vec3 ray;
             float mie; // only calc the red channel
-            float mu, muS, nu;
-
-            GetMuMuSNu(uv, r, dhdH, mu, muS, nu); 
-        
             Inscatter(r, mu, muS, nu, ray, mie); 
             
             // store only red component of single Mie scattering (cf. 'Angular precision')
@@ -3586,8 +3585,10 @@ const InscatterShader = {
 
 class SkyPrecomputeUtil {
 
-	constructor(capabilities) {
+	constructor(capabilities, options = {}) {
 		const isWebGL2 = capabilities.version > 1;
+
+		const use3DInscatterTexture = options.use3DInscatterTexture !== undefined ? (options.use3DInscatterTexture && isWebGL2) : false;
 
 		// ios provides a poor implementation of float linear, so fallback to Half Float
 		const isIOS = /(iPad|iPhone|iPod)/g.test(navigator.userAgent);
@@ -3620,7 +3621,7 @@ class SkyPrecomputeUtil {
 		transmittanceRT.texture.format = PIXEL_FORMAT.RGBA;
 		transmittanceRT.texture.generateMipmaps = false;
 
-		const inscatterRT = new RenderTarget2D(512, 512);
+		const inscatterRT = use3DInscatterTexture ? new RenderTarget3D(256, 128, 32) : new RenderTarget2D(512, 512);
 		inscatterRT.texture.minFilter = TEXTURE_FILTER.LINEAR;
 		inscatterRT.texture.magFilter = TEXTURE_FILTER.LINEAR;
 		inscatterRT.texture.type = type;
@@ -3637,6 +3638,7 @@ class SkyPrecomputeUtil {
 		const inscatterPass = new ShaderPostPass(InscatterShader);
 		inscatterPass.uniforms._Transmittance = transmittanceRT.texture;
 		inscatterPass.uniforms.betaR = betaR;
+		inscatterPass.material.defines.INSCATTER_3D = !!use3DInscatterTexture;
 
 		//
 
@@ -3669,10 +3671,23 @@ class SkyPrecomputeUtil {
 	}
 
 	computeInscatter(renderer) {
-		renderer.setRenderTarget(this._inscatterRT);
-		renderer.setClearColor(0, 0, 0, 0);
-		renderer.clear(true, true, true);
-		this._inscatterPass.render(renderer);
+		const inscatterRT = this._inscatterRT;
+		const inscatterPass = this._inscatterPass;
+		if (inscatterRT.isRenderTarget3D) {
+			for (let i = 0; i < 32; i++) {
+				inscatterRT.activeLayer = i;
+				inscatterPass.uniforms.layer = i;
+				renderer.setRenderTarget(inscatterRT);
+				renderer.setClearColor(0, 0, 0, 0);
+				renderer.clear(true, true, true);
+				inscatterPass.render(renderer);
+			}
+		} else {
+			renderer.setRenderTarget(inscatterRT);
+			renderer.setClearColor(0, 0, 0, 0);
+			renderer.clear(true, true, true);
+			inscatterPass.render(renderer);
+		}
 	}
 
 	setBetaRayleighDensity(wavelengths, skyTint, atmosphereThickness) {
@@ -3712,6 +3727,14 @@ class SkyPrecomputeUtil {
 
 		// w channel solves the Rayleigh Offset artifact issue
 		return this._betaR;
+	}
+
+	dispose() {
+		this._transmittanceRT.dispose();
+		this._inscatterRT.dispose();
+
+		this._transmittancePass.dispose();
+		this._inscatterPass.dispose();
 	}
 
 }

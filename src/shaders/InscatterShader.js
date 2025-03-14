@@ -7,7 +7,8 @@ export const InscatterShader = {
 	defines: {},
 	uniforms: {
 		_Transmittance: null,
-		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1]
+		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
+		layer: 0
 	},
 	vertexShader: `
         attribute vec3 a_Position;
@@ -24,12 +25,16 @@ export const InscatterShader = {
         }
     `,
 	fragmentShader: `
-        uniform sampler2D _Transmittance;
-
-        varying vec2 v_Uv;
-
 		${PrecomputeCommon}
         ${AtmosphereCommon}
+
+		uniform sampler2D _Transmittance;
+
+		#ifdef INSCATTER_3D
+			uniform float layer;
+		#endif
+
+        varying vec2 v_Uv;
 
         const float epsion = 0.000000001;
         
@@ -131,30 +136,25 @@ export const InscatterShader = {
         } 
         
         void main() {
-            vec2 coords = v_Uv; // range 0 ~ 1.
+			vec2 uv = v_Uv;
 
-			vec2 uv;
-			float layer;
+			#ifndef INSCATTER_3D
+				float layer;
+				if (RES_R > 1.) {
+					float layerIndex = floor(uv.y * RES_R);
+					layerIndex = clamp(layerIndex, 0., RES_R - 1.);
+					layer = pow(2., layerIndex);
 
-            if (RES_R > 1.) {
-				float layerHeight = 1. / RES_R;
+					uv.y = uv.y * RES_R - layerIndex;
+					uv.y = clamp(uv.y, 0., 1.);
 
-				float layerIndex = floor(coords.y * RES_R);
-				layerIndex = clamp(layerIndex, 0., RES_R - 1.);
-
-				uv.x = coords.x;
-				uv.y = coords.y * RES_R - layerIndex;
-				uv.y = clamp(uv.y, 0., 1.);
-
-				layer = pow(2., layerIndex);
-
-				if (layerIndex < 0.5) {
-					layer = 0.0;
+					if (layerIndex < 0.5) {
+						layer = 0.0;
+					}
+				} else {
+					layer = 1.;
 				}
-            } else {
-				uv = coords;
-				layer = 1.;
-            }
+			#endif
 
 			float r = layer / max((RES_R_TOTAL - 1.0), 1.0);
             r = r * r;
@@ -166,13 +166,12 @@ export const InscatterShader = {
             float dmaxp = sqrt(r * r - Rg * Rg);
         
             vec4 dhdH = vec4(dmin, dmax, dminp, dmaxp);
+			
+            float mu, muS, nu;
+            GetMuMuSNu(uv, r, dhdH, mu, muS, nu);
 
 			vec3 ray;
             float mie; // only calc the red channel
-            float mu, muS, nu;
-
-            GetMuMuSNu(uv, r, dhdH, mu, muS, nu); 
-        
             Inscatter(r, mu, muS, nu, ray, mie); 
             
             // store only red component of single Mie scattering (cf. 'Angular precision')

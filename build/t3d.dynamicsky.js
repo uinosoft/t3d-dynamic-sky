@@ -942,7 +942,8 @@ vec3 ComputeTransmittance(vec2 uv) {
 		defines: {},
 		uniforms: {
 			_Transmittance: null,
-			betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1]
+			betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
+			layer: 0
 		},
 		vertexShader: `
 				attribute vec3 a_Position;
@@ -959,12 +960,16 @@ vec3 ComputeTransmittance(vec2 uv) {
 				}
 		`,
 		fragmentShader: `
-				uniform sampler2D _Transmittance;
-
-				varying vec2 v_Uv;
-
 		${PrecomputeCommon}
 				${AtmosphereCommon}
+
+		uniform sampler2D _Transmittance;
+
+		#ifdef INSCATTER_3D
+			uniform float layer;
+		#endif
+
+				varying vec2 v_Uv;
 
 				const float epsion = 0.000000001;
 				
@@ -1066,30 +1071,25 @@ vec3 ComputeTransmittance(vec2 uv) {
 				} 
 				
 				void main() {
-						vec2 coords = v_Uv; // range 0 ~ 1.
+			vec2 uv = v_Uv;
 
-			vec2 uv;
-			float layer;
+			#ifndef INSCATTER_3D
+				float layer;
+				if (RES_R > 1.) {
+					float layerIndex = floor(uv.y * RES_R);
+					layerIndex = clamp(layerIndex, 0., RES_R - 1.);
+					layer = pow(2., layerIndex);
 
-						if (RES_R > 1.) {
-				float layerHeight = 1. / RES_R;
+					uv.y = uv.y * RES_R - layerIndex;
+					uv.y = clamp(uv.y, 0., 1.);
 
-				float layerIndex = floor(coords.y * RES_R);
-				layerIndex = clamp(layerIndex, 0., RES_R - 1.);
-
-				uv.x = coords.x;
-				uv.y = coords.y * RES_R - layerIndex;
-				uv.y = clamp(uv.y, 0., 1.);
-
-				layer = pow(2., layerIndex);
-
-				if (layerIndex < 0.5) {
-					layer = 0.0;
+					if (layerIndex < 0.5) {
+						layer = 0.0;
+					}
+				} else {
+					layer = 1.;
 				}
-						} else {
-				uv = coords;
-				layer = 1.;
-						}
+			#endif
 
 			float r = layer / max((RES_R_TOTAL - 1.0), 1.0);
 						r = r * r;
@@ -1101,13 +1101,12 @@ vec3 ComputeTransmittance(vec2 uv) {
 						float dmaxp = sqrt(r * r - Rg * Rg);
 				
 						vec4 dhdH = vec4(dmin, dmax, dminp, dmaxp);
+			
+						float mu, muS, nu;
+						GetMuMuSNu(uv, r, dhdH, mu, muS, nu);
 
 			vec3 ray;
 						float mie; // only calc the red channel
-						float mu, muS, nu;
-
-						GetMuMuSNu(uv, r, dhdH, mu, muS, nu); 
-				
 						Inscatter(r, mu, muS, nu, ray, mie); 
 						
 						// store only red component of single Mie scattering (cf. 'Angular precision')
@@ -1117,8 +1116,9 @@ vec3 ComputeTransmittance(vec2 uv) {
 	};
 
 	class SkyPrecomputeUtil {
-		constructor(capabilities) {
+		constructor(capabilities, options = {}) {
 			const isWebGL2 = capabilities.version > 1;
+			const use3DInscatterTexture = options.use3DInscatterTexture !== undefined ? options.use3DInscatterTexture && isWebGL2 : false;
 
 			// ios provides a poor implementation of float linear, so fallback to Half Float
 			const isIOS = /(iPad|iPhone|iPod)/g.test(navigator.userAgent);
@@ -1148,7 +1148,7 @@ vec3 ComputeTransmittance(vec2 uv) {
 			transmittanceRT.texture.type = type;
 			transmittanceRT.texture.format = t3d.PIXEL_FORMAT.RGBA;
 			transmittanceRT.texture.generateMipmaps = false;
-			const inscatterRT = new t3d.RenderTarget2D(512, 512);
+			const inscatterRT = use3DInscatterTexture ? new t3d.RenderTarget3D(256, 128, 32) : new t3d.RenderTarget2D(512, 512);
 			inscatterRT.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
 			inscatterRT.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
 			inscatterRT.texture.type = type;
@@ -1164,6 +1164,7 @@ vec3 ComputeTransmittance(vec2 uv) {
 			const inscatterPass = new t3d.ShaderPostPass(InscatterShader);
 			inscatterPass.uniforms._Transmittance = transmittanceRT.texture;
 			inscatterPass.uniforms.betaR = betaR;
+			inscatterPass.material.defines.INSCATTER_3D = !!use3DInscatterTexture;
 
 			//
 
@@ -1189,10 +1190,23 @@ vec3 ComputeTransmittance(vec2 uv) {
 			this._transmittancePass.render(renderer);
 		}
 		computeInscatter(renderer) {
-			renderer.setRenderTarget(this._inscatterRT);
-			renderer.setClearColor(0, 0, 0, 0);
-			renderer.clear(true, true, true);
-			this._inscatterPass.render(renderer);
+			const inscatterRT = this._inscatterRT;
+			const inscatterPass = this._inscatterPass;
+			if (inscatterRT.isRenderTarget3D) {
+				for (let i = 0; i < 32; i++) {
+					inscatterRT.activeLayer = i;
+					inscatterPass.uniforms.layer = i;
+					renderer.setRenderTarget(inscatterRT);
+					renderer.setClearColor(0, 0, 0, 0);
+					renderer.clear(true, true, true);
+					inscatterPass.render(renderer);
+				}
+			} else {
+				renderer.setRenderTarget(inscatterRT);
+				renderer.setClearColor(0, 0, 0, 0);
+				renderer.clear(true, true, true);
+				inscatterPass.render(renderer);
+			}
 		}
 		setBetaRayleighDensity(wavelengths, skyTint, atmosphereThickness) {
 			// Sky Tint shifts the value of Wavelengths
@@ -1226,6 +1240,12 @@ vec3 ComputeTransmittance(vec2 uv) {
 
 			// w channel solves the Rayleigh Offset artifact issue
 			return this._betaR;
+		}
+		dispose() {
+			this._transmittanceRT.dispose();
+			this._inscatterRT.dispose();
+			this._transmittancePass.dispose();
+			this._inscatterPass.dispose();
 		}
 	}
 	const _vec3_1 = new t3d.Vector3();

@@ -26,6 +26,9 @@
 		import { OrbitControls } from 't3d/examples/jsm/controls/OrbitControls.js';
 
 		import { SkyPrecomputeUtil } from 't3d-dynamic-sky';
+		import { PrecomputeHelper } from './jsm/PrecomputeHelper.js';
+
+		import { GUI } from './libs/lil-gui.esm.min.js';
 
 		let width = window.innerWidth || 2;
 		let height = window.innerHeight || 2;
@@ -38,52 +41,82 @@
 		canvas.height = height;
 		container.appendChild(canvas);
 
-		const contextParams = { antialias: false, alpha: false };
+		const contextParams = { antialias: true, alpha: false };
 		const gl = canvas.getContext('webgl2', contextParams) || canvas.getContext('webgl', contextParams);
 		const renderer = new t3d.WebGLRenderer(gl);
 
 		const backRenderTarget = new t3d.RenderTargetBack(canvas);
-
-		const capabilities = renderer.capabilities;
 		
-		const skyPrecomputeUtil = new SkyPrecomputeUtil(capabilities);
-		// console.log(skyPrecomputeUtil.setBetaRayleighDensity(new t3d.Vector3(680, 550, 440), new t3d.Color3(128 / 255, 128 / 255, 128 / 255, 255 / 255), 1.0));
-		// [0.05952087360787257, 0.05952087360787257, 0.05952087360787257, 1];
-
-		console.time('computeTransmittance');
-		skyPrecomputeUtil.computeTransmittance(renderer);
-		console.timeEnd('computeTransmittance');
-
-		console.time('computeInscatter');
-		skyPrecomputeUtil.computeInscatter(renderer);
-		console.timeEnd('computeInscatter');
-
 		const scene = new t3d.Scene();
 
 		const camera = new t3d.Camera();
-		camera.position.set(0, 0, 10);
+		camera.position.set(0, 1.5, 6);
 		camera.setPerspective(30 / 180 * Math.PI, width / height, 0.01, 100);
 		scene.add(camera);
 
-		const material1 = new t3d.BasicMaterial();
-		material1.diffuseMap = skyPrecomputeUtil.transmittanceTexture;
-		material1.side = t3d.DRAW_SIDE.DOUBLE;
-		const geometry1 = new t3d.PlaneGeometry(2, 2);
-		const plane1 = new t3d.Mesh(geometry1, material1);
-		plane1.euler.x = Math.PI / 2;
-		plane1.position.set(-1, 0, 0);
-		scene.add(plane1);
-
-		const material2 = new t3d.BasicMaterial();
-		material2.diffuseMap = skyPrecomputeUtil.inscatterTexture;
-		material2.side = t3d.DRAW_SIDE.DOUBLE;
-		const geometry2 = new t3d.PlaneGeometry(2, 2);
-		const plane2 = new t3d.Mesh(geometry2, material2);
-		plane2.euler.x = Math.PI / 2;
-		plane2.position.set(1, 0, 0);
-		scene.add(plane2);
-
 		const controller = new OrbitControls(camera, canvas);
+
+		//
+
+		let skyPrecomputeUtil, transmittanceHelper, inscatterHelper;
+
+		function precompute(use3DInscatterTexture = true) {
+			clear();
+
+			skyPrecomputeUtil = new SkyPrecomputeUtil(renderer.capabilities, {
+				use3DInscatterTexture
+			});
+			// skyPrecomputeUtil.setBetaRayleighDensity(new t3d.Vector3(680, 550, 440), new t3d.Color3(128 / 255, 128 / 255, 128 / 255, 255 / 255), 1.0);
+
+			console.time('computeTransmittance');
+			skyPrecomputeUtil.computeTransmittance(renderer);
+			console.timeEnd('computeTransmittance');
+
+			console.time('computeInscatter');
+			skyPrecomputeUtil.computeInscatter(renderer);
+			console.timeEnd('computeInscatter');
+
+			transmittanceHelper = new PrecomputeHelper(skyPrecomputeUtil.transmittanceTexture);
+			transmittanceHelper.position.set(-1.1, 0, 0);
+			transmittanceHelper.scale.set(2, 1, 0.5);
+			scene.add(transmittanceHelper);
+
+			inscatterHelper = new PrecomputeHelper(skyPrecomputeUtil.inscatterTexture);
+			inscatterHelper.position.set(1.1, 0, 0);
+			if (use3DInscatterTexture) {
+				inscatterHelper.scale.set(2, 0.5, 1);
+			} else {
+				inscatterHelper.scale.set(2, 1, 2);
+			}
+			scene.add(inscatterHelper);
+		}
+
+		function clear() {
+			skyPrecomputeUtil && skyPrecomputeUtil.dispose();
+
+			if (transmittanceHelper) {
+				transmittanceHelper.geometry.dispose();
+				transmittanceHelper.material.dispose();
+				scene.remove(transmittanceHelper);
+			}
+
+			if (inscatterHelper) {
+				inscatterHelper.geometry.dispose();
+				inscatterHelper.material.dispose();
+				scene.remove(inscatterHelper);
+			}
+		}
+		
+		precompute(false);
+
+		// gui
+
+		const gui = new GUI();
+		gui.add({ inscatter: '2D' }, 'inscatter', ['2D', '3D']).onChange(value => {
+			precompute(value === '3D');
+		}).name('Inscatter Texture');
+
+		//
 
 		function loop(count) {
 			requestAnimationFrame(loop);
@@ -95,7 +128,7 @@
 			scene.updateRenderQueue(camera);
 
 			renderer.setRenderTarget(backRenderTarget);
-			renderer.setClearColor(0.2, 0.2, 0.2, 1);
+			renderer.setClearColor(0.1, 0.1, 0.1, 1);
 			renderer.clear(true, true, true);
 			renderer.renderScene(scene, camera);
 		}

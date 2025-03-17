@@ -44,7 +44,7 @@ export const InscatterShader = {
             float x = coord.x * float(RES_MU_S * RES_NU) - 0.5;
             float y = coord.y * float(RES_MU) - 0.5;
         
-            #ifdef INSCATTER_NON_LINEAR 
+            #if INSCATTER_MAPPING == 1
                 if (y < float(RES_MU) / 2.0) { // bottom half
                     float d = 1.0 - y / (float(RES_MU) / 2.0 - 1.0); 
                     d = min(max(dhdH.z, d * dhdH.w), dhdH.w * 0.999); 

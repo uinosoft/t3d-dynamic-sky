@@ -1,6 +1,6 @@
 // t3d-dynamic-sky
 import * as t3d from 't3d';
-import { Vector3, Vector4, Mesh, ShaderMaterial, BLEND_TYPE, DRAW_MODE, Geometry, Attribute, Buffer, PIXEL_TYPE, RenderTarget2D, TEXTURE_FILTER, PIXEL_FORMAT, RenderTarget3D, ShaderPostPass, MathUtils } from 't3d';
+import { Vector3, Vector4, Mesh, ShaderMaterial, BLEND_TYPE, DRAW_MODE, Geometry, Attribute, Buffer, DRAW_SIDE, SphereGeometry, PIXEL_TYPE, RenderTarget2D, TEXTURE_FILTER, PIXEL_FORMAT, RenderTarget3D, ShaderPostPass, MathUtils } from 't3d';
 
 const SkyDomeData = {
 	vertices: [
@@ -2816,7 +2816,6 @@ const starsShader = {
 };
 
 const AtmosphereCommon = `
-// const vec3 betaR = vec3(5.8e-3, 1.35e-2, 3.31e-2);
 uniform vec4 betaR;
 
 const float RES_R_TOTAL = 32.; // all altitude layer
@@ -2824,18 +2823,6 @@ const float RES_R = 4.; 	// 3D texture depth
 const float RES_MU = 128.; 	// height of the texture
 const float RES_MU_S = 32.; // width per table
 const float RES_NU = 8.;	// table per texture depth
-
-// ---------------------------------------------------------------------------- 
-// PARAMETERIZATION OPTIONS 
-// ----------------------------------------------------------------------------
-
-// Transmittance mapping
-// 0 - linear implementation
-// 1 - original implementation in 2008
-// 2 - new implementation in 2017
-#define TRANSMITTANCE_MAPPING 1
-
-#define INSCATTER_NON_LINEAR
 
 // ---------------------------------------------------------------------------- 
 // UTILITY FUNCTIONS
@@ -2893,9 +2880,96 @@ vec3 Transmittance(float r, float mu) {
 }
 `;
 
+const InscatterLookup = `
+float GetTextureCoordFromUnitRange(float x, float textureSize) {
+	return 0.5 / textureSize + x * (1.0 - 1.0 / textureSize);
+}
+
+#ifdef INSCATTER_3D
+vec4 Inscatter(highp sampler3D table, float r, float mu, float muS, float nu) {
+	float resR = RES_R_TOTAL;
+#else
+vec4 Inscatter(sampler2D table, float r, float mu, float muS, float nu) {
+	float resR = RES_R;
+#endif
+	float H = sqrt(Rt * Rt - Rg * Rg);
+	float rho = sqrt(r * r - Rg * Rg);
+	float uR = GetTextureCoordFromUnitRange(rho / H, resR);
+	#if INSCATTER_MAPPING == 1
+		float rmu = r * mu;
+		float discriminant = rmu * rmu - r * r + Rg * Rg;
+		float uMu;
+		if (rmu < 0.0 && discriminant > 0.0) {
+			float d = -rmu - sqrt(discriminant);
+			float d_min = r - Rg;
+			float d_max = rho;
+			uMu = 0.5 - 0.5 * GetTextureCoordFromUnitRange(d_max == d_min ? 0.0 : (d - d_min) / (d_max - d_min), RES_MU / 2.);
+		} else {
+			float d = -rmu + sqrt(discriminant + H * H);
+			float d_min = Rt - r;
+			float d_max = rho + H;
+			uMu = 0.5 + 0.5 * GetTextureCoordFromUnitRange((d - d_min) / (d_max - d_min), RES_MU / 2.);
+		}
+
+		// paper formula
+		// float uMuS = GetTextureCoordFromUnitRange(max((1.0 - exp(-3.0 * muS - 0.6)) / (1.0 - exp(-3.6)), 0.0), RES_MU_S);
+		// better formula
+		float uMuS = GetTextureCoordFromUnitRange((atan(max(muS, -0.1975) * tan(1.26 * 0.75)) / 0.75 + (1.0 - 0.26)) * 0.5, RES_MU_S);
+
+		if (_SkyboxOcean < 0.5) {
+			uMu = rmu < 0.0 && discriminant > 0.0 ? 0.975 : uMu * 0.975 + 0.015 * uMuS; // 0.975 to fix the horizion seam. 0.015 to fix zenith artifact
+		}
+	#else
+		float uMu = GetTextureCoordFromUnitRange((mu + 1.0) / 2.0, RES_MU);
+		float uMuS = GetTextureCoordFromUnitRange(max(muS + 0.2, 0.0) / 1.2, RES_MU_S) 0.5 / RES_MU_S +  * (1.0 - 1.0 / RES_MU_S);
+	#endif
+
+	float lep = (nu + 1.0) / 2.0 * (RES_NU - 1.0);
+	float uNu = floor(lep);
+	lep = lep - uNu;
+
+	float uNu_uMuS = uNu + uMuS;
+
+	#ifdef INSCATTER_3D
+		return texture(table, vec3(uNu_uMuS / RES_NU, uMu, uR)) * (1.0 - lep) + texture(table, vec3((uNu_uMuS + 1.0) / RES_NU, uMu, uR)) * lep;
+	#else
+		#ifdef SKY_MULTISAMPLE  
+			// new 2D lookup
+			float u_0 = floor(uR * RES_R) / RES_R;
+			float u_1 = floor(uR * RES_R + 1.0) / RES_R;
+			float u_frac = fract(uR * RES_R);
+
+			// pre-calculate uv
+			float uv_0X = uNu_uMuS / RES_NU;
+			float uv_1X = (uNu_uMuS + 1.0) / RES_NU;
+			float uv_0Y = uMu / RES_R + u_0;
+			float uv_1Y = uMu / RES_R + u_1;
+			float OneMinusLep = 1.0 - lep;
+
+			#ifdef FIX_INSCATTER_SAMPLE
+				uv_0X = fixU(uv_0X);
+				uv_1X = fixU(uv_1X);
+			#endif
+
+			vec4 A = texture2D(table, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_0Y)) * lep;	
+			vec4 B = texture2D(table, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_1Y)) * lep;	
+
+			return A * (1.0 - u_frac) + B * u_frac;
+
+		#else	
+			return texture2D(table, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(table, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
+		#endif
+	#endif 
+}
+`;
+
 const SkyShader = {
 	name: 'sky_bg',
 	defines: {
+		TRANSMITTANCE_MAPPING: 1,
+		INSCATTER_MAPPING: 1,
+		INSCATTER_3D: false,
+
 		SKY_MULTISAMPLE: true,
 		SKY_SUNDISK: true,
 		COLORSPACE_GAMMA: true,
@@ -3009,7 +3083,12 @@ const SkyShader = {
 
         uniform float _SkyboxOcean;
 
-        uniform sampler2D _Inscatter;
+		#ifdef INSCATTER_3D
+			 uniform highp sampler3D _Inscatter;
+		#else
+			 uniform sampler2D _Inscatter;
+		#endif
+       
         uniform sampler2D _Transmittance;
 
         uniform vec4 _NightHorizonColor;
@@ -3039,6 +3118,8 @@ const SkyShader = {
         const float RL = 6421000.0;
 
 		${AtmosphereCommon}
+		${TransmittanceLookup}
+		${InscatterLookup}
 
         #ifdef FIX_INSCATTER_SAMPLE
             float fixU(float u) {
@@ -3046,66 +3127,6 @@ const SkyShader = {
                 return 3.0 / RES_NU + fixNumber;
             }
         #endif
-
-        vec4 Texture4D(sampler2D table, float r, float mu, float muS, float nu) {
-            float H = sqrt(Rt * Rt - Rg * Rg);
-            float rho = sqrt(r * r - Rg * Rg);
-            #ifdef INSCATTER_NON_LINEAR
-                float rmu = r * mu;
-                float delta = rmu * rmu - r * r + Rg * Rg;
-                vec4 cst = rmu < 0.0 && delta > 0.0 ? vec4(1.0, 0.0, 0.0, 0.5 - 0.5 / RES_MU) : vec4(-1.0, H * H, H, 0.5 + 0.5 / RES_MU);     
-                float uR = 0.5 / RES_R + rho / H * (1.0 - 1.0 / RES_R);
-                float uMu = cst.w + (rmu * cst.x + sqrt(delta + cst.y)) / (rho + cst.z) * (0.5 - 1.0 / float(RES_MU));
-
-                // paper formula
-                // float uMuS = 0.5 / RES_MU_S + max((1.0 - exp(-3.0 * muS - 0.6)) / (1.0 - exp(-3.6)), 0.0) * (1.0 - 1.0 / RES_MU_S);
-                // better formula
-                float uMuS = 0.5 / RES_MU_S + (atan(max(muS, -0.1975) * tan(1.26 * 0.75)) / 0.75 + (1.0 - 0.26)) * 0.5 * (1.0 - 1.0 / RES_MU_S);
-
-                if (_SkyboxOcean < 0.5) {
-                    uMu = rmu < 0.0 && delta > 0.0 ? 0.975 : uMu * 0.975 + 0.015 * uMuS; // 0.975 to fix the horizion seam. 0.015 to fix zenith artifact
-                }
-            #else
-                float uR = 0.5 / RES_R + rho / H * (1.0 - 1.0 / RES_R);
-                float uMu = 0.5 / RES_MU + (mu + 1.0) / 2.0 * (1.0 - 1.0 / RES_MU);
-                float uMuS = 0.5 / RES_MU_S + max(muS + 0.2, 0.0) / 1.2 * (1.0 - 1.0 / RES_MU_S);
-            #endif
-            float lep = (nu + 1.0) / 2.0 * (RES_NU - 1.0);
-            float uNu = floor(lep);
-            lep = lep - uNu;
-
-            // Original 3D lookup
-            // return tex3D(table, float3((uNu + uMuS) / RES_NU, uMu, uR)) * (1.0 - lep) + tex3D(table, float3((uNu + uMuS + 1.0) / RES_NU, uMu, uR)) * lep;
-
-            float uNu_uMuS = uNu + uMuS;
-
-            #ifdef SKY_MULTISAMPLE  
-                // new 2D lookup
-                float u_0 = floor(uR * RES_R) / RES_R;
-                float u_1 = floor(uR * RES_R + 1.0) / RES_R;
-                float u_frac = fract(uR * RES_R);
-
-                // pre-calculate uv
-                float uv_0X = uNu_uMuS / RES_NU;
-                float uv_1X = (uNu_uMuS + 1.0) / RES_NU;
-                float uv_0Y = uMu / RES_R + u_0;
-                float uv_1Y = uMu / RES_R + u_1;
-                float OneMinusLep = 1.0 - lep;
-
-                #ifdef FIX_INSCATTER_SAMPLE
-                    uv_0X = fixU(uv_0X);
-                    uv_1X = fixU(uv_1X);
-                #endif
-
-                vec4 A = texture2D(table, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_0Y)) * lep;	
-                vec4 B = texture2D(table, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_1Y)) * lep;	
-
-                return A * (1.0 - u_frac) + B * u_frac;
-
-            #else	
-                return texture2D(table, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(table, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
-            #endif
-        }
 
         vec3 GetMie(vec4 rayMie) {	
             // approximated single Mie scattering (cf. approximate Cm in paragraph "Angular precision")
@@ -3125,8 +3146,6 @@ const SkyShader = {
 			// we will multiply (1.0 + mu * mu) together with Rayleigh phase later.
 			return miePhase_g.x / pow(miePhase_g.y - miePhase_g.z * mu, 1.5);
 		}
-
-        ${TransmittanceLookup}
 
         const vec3 EARTH_POS = vec3(0.0, 6360010.0, 0.0);
         const float SUN_BRIGHTNESS = 40.0;
@@ -3152,7 +3171,7 @@ const SkyShader = {
             // float nu = dot(viewdir, _SunDirSize.xyz); // nu value is from function input
             float muS = dot(camera, _SunDirSize.xyz) / r;
 
-            vec4 inScatter = Texture4D(_Inscatter, r, rMu / r, muS, nu);
+            vec4 inScatter = Inscatter(_Inscatter, r, rMu / r, muS, nu);
 
             extinction = Transmittance(r, mu);
 
@@ -3253,16 +3272,45 @@ const SkyShader = {
     `
 };
 
-class Sky extends t3d.Mesh {
+class Sky extends Mesh {
 
 	constructor() {
-		const material = new t3d.ShaderMaterial(SkyShader);
+		const material = new ShaderMaterial(SkyShader);
 		material.depthWrite = false;
-		material.side = t3d.DRAW_SIDE.BACK;
+		material.side = DRAW_SIDE.BACK;
 
-		super(new t3d.SphereGeometry(1, 100, 100), material);
+		super(new SphereGeometry(1, 100, 100), material);
 
 		this.frustumCulled = false;
+	}
+
+	setPrcomputeTextures(skyPrecomputeUtil) {
+		const { transmittanceTexture, inscatterTexture } = skyPrecomputeUtil;
+		const { uniforms, defines } = this.material;
+
+		uniforms._Transmittance = transmittanceTexture;
+		uniforms._Inscatter = inscatterTexture;
+
+		uniforms.betaR = skyPrecomputeUtil.betaR;
+
+		let needsUpdate = false;
+
+		if (defines.TRANSMITTANCE_MAPPING !== skyPrecomputeUtil.transmittanceMapping) {
+			defines.TRANSMITTANCE_MAPPING = skyPrecomputeUtil.transmittanceMapping;
+			needsUpdate = true;
+		}
+
+		if (defines.INSCATTER_MAPPING !== skyPrecomputeUtil.inscatterMapping) {
+			defines.INSCATTER_MAPPING = skyPrecomputeUtil.inscatterMapping;
+			needsUpdate = true;
+		}
+
+		if (defines.INSCATTER_3D !== skyPrecomputeUtil.use3DInscatterTexture) {
+			defines.INSCATTER_3D = skyPrecomputeUtil.use3DInscatterTexture;
+			needsUpdate = true;
+		}
+
+		this.material.needsUpdate = needsUpdate;
 	}
 
 }
@@ -3447,7 +3495,7 @@ const InscatterShader = {
             float x = coord.x * float(RES_MU_S * RES_NU) - 0.5;
             float y = coord.y * float(RES_MU) - 0.5;
         
-            #ifdef INSCATTER_NON_LINEAR 
+            #if INSCATTER_MAPPING == 1
                 if (y < float(RES_MU) / 2.0) { // bottom half
                     float d = 1.0 - y / (float(RES_MU) / 2.0 - 1.0); 
                     d = min(max(dhdH.z, d * dhdH.w), dhdH.w * 0.999); 
@@ -3588,6 +3636,15 @@ class SkyPrecomputeUtil {
 	constructor(capabilities, options = {}) {
 		const isWebGL2 = capabilities.version > 1;
 
+		// Transmittance mapping
+		// 0 - linear implementation
+		// 1 - original implementation in 2008
+		// 2 - new implementation in 2017
+		const transmittanceMapping = options.transmittanceMapping !== undefined ? options.transmittanceMapping : 1;
+		// Inscatter mapping
+		// 0 - linear implementation
+		// 1 - non-linear implementation
+		const inscatterMapping = options.inscatterMapping !== undefined ? options.inscatterMapping : 1;
 		const use3DInscatterTexture = options.use3DInscatterTexture !== undefined ? (options.use3DInscatterTexture && isWebGL2) : false;
 
 		// ios provides a poor implementation of float linear, so fallback to Half Float
@@ -3634,10 +3691,13 @@ class SkyPrecomputeUtil {
 
 		const transmittancePass = new ShaderPostPass(TransmittanceShader);
 		transmittancePass.uniforms.betaR = betaR;
+		transmittancePass.material.defines.TRANSMITTANCE_MAPPING = transmittanceMapping;
 
 		const inscatterPass = new ShaderPostPass(InscatterShader);
 		inscatterPass.uniforms._Transmittance = transmittanceRT.texture;
 		inscatterPass.uniforms.betaR = betaR;
+		inscatterPass.material.defines.TRANSMITTANCE_MAPPING = transmittanceMapping;
+		inscatterPass.material.defines.INSCATTER_MAPPING = inscatterMapping;
 		inscatterPass.material.defines.INSCATTER_3D = !!use3DInscatterTexture;
 
 		//
@@ -3649,6 +3709,10 @@ class SkyPrecomputeUtil {
 		this._inscatterPass = inscatterPass;
 
 		this._betaR = betaR;
+
+		this._transmittanceMapping = transmittanceMapping;
+		this._inscatterMapping = inscatterMapping;
+		this._use3DInscatterTexture = use3DInscatterTexture;
 	}
 
 	get transmittanceTexture() {
@@ -3661,6 +3725,18 @@ class SkyPrecomputeUtil {
 
 	get betaR() {
 		return this._betaR;
+	}
+
+	get transmittanceMapping() {
+		return this._transmittanceMapping;
+	}
+
+	get inscatterMapping() {
+		return this._inscatterMapping;
+	}
+
+	get use3DInscatterTexture() {
+		return this._use3DInscatterTexture;
 	}
 
 	computeTransmittance(renderer) {

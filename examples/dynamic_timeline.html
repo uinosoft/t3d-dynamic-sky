@@ -47,7 +47,9 @@
 
 		const capabilities = forwardRenderer.capabilities;
 
-		const skyPrecomputeUtil = new SkyPrecomputeUtil(capabilities);
+		const use3DInscatterTexture = true;
+
+		const skyPrecomputeUtil = new SkyPrecomputeUtil(capabilities, { use3DInscatterTexture });
 		skyPrecomputeUtil.computeTransmittance(forwardRenderer);
 		skyPrecomputeUtil.computeInscatter(forwardRenderer);
 
@@ -119,6 +121,7 @@
 		material.uniforms._SkyColor = [158 / 255, 158 / 255, 158 / 255];
 
 		const sky = new Sky();
+		sky.setPrcomputeTextures(skyPrecomputeUtil);
 		sky.material.transparent = true;
 		sky.material.defines.SKY_HDR_MODE = false;
 		scene.add(sky);
@@ -127,13 +130,10 @@
 		moonTexture.anisotropy = 16;
 
 		const skyMaterial = sky.material;
-		skyMaterial.uniforms._Inscatter = skyPrecomputeUtil.inscatterTexture;
-		skyMaterial.uniforms._Transmittance = skyPrecomputeUtil.transmittanceTexture;
 		skyMaterial.uniforms._MoonSampler = moonTexture;
 		skyMaterial.uniforms._OuterSpaceCube = cube_texture;
 		skyMaterial.uniforms._SkyExposure = 1;
 		skyMaterial.uniforms._CameraFar = 800;
-		skyMaterial.uniforms.betaR = skyPrecomputeUtil.betaR;
 
 		const sphereGeometry = new t3d.SphereGeometry(1);
 

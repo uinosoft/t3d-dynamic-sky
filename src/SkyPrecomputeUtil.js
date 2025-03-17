@@ -7,6 +7,15 @@ export class SkyPrecomputeUtil {
 	constructor(capabilities, options = {}) {
 		const isWebGL2 = capabilities.version > 1;
 
+		// Transmittance mapping
+		// 0 - linear implementation
+		// 1 - original implementation in 2008
+		// 2 - new implementation in 2017
+		const transmittanceMapping = options.transmittanceMapping !== undefined ? options.transmittanceMapping : 1;
+		// Inscatter mapping
+		// 0 - linear implementation
+		// 1 - non-linear implementation
+		const inscatterMapping = options.inscatterMapping !== undefined ? options.inscatterMapping : 1;
 		const use3DInscatterTexture = options.use3DInscatterTexture !== undefined ? (options.use3DInscatterTexture && isWebGL2) : false;
 
 		// ios provides a poor implementation of float linear, so fallback to Half Float
@@ -53,10 +62,13 @@ export class SkyPrecomputeUtil {
 
 		const transmittancePass = new ShaderPostPass(TransmittanceShader);
 		transmittancePass.uniforms.betaR = betaR;
+		transmittancePass.material.defines.TRANSMITTANCE_MAPPING = transmittanceMapping;
 
 		const inscatterPass = new ShaderPostPass(InscatterShader);
 		inscatterPass.uniforms._Transmittance = transmittanceRT.texture;
 		inscatterPass.uniforms.betaR = betaR;
+		inscatterPass.material.defines.TRANSMITTANCE_MAPPING = transmittanceMapping;
+		inscatterPass.material.defines.INSCATTER_MAPPING = inscatterMapping;
 		inscatterPass.material.defines.INSCATTER_3D = !!use3DInscatterTexture;
 
 		//
@@ -68,6 +80,10 @@ export class SkyPrecomputeUtil {
 		this._inscatterPass = inscatterPass;
 
 		this._betaR = betaR;
+
+		this._transmittanceMapping = transmittanceMapping;
+		this._inscatterMapping = inscatterMapping;
+		this._use3DInscatterTexture = use3DInscatterTexture;
 	}
 
 	get transmittanceTexture() {
@@ -80,6 +96,18 @@ export class SkyPrecomputeUtil {
 
 	get betaR() {
 		return this._betaR;
+	}
+
+	get transmittanceMapping() {
+		return this._transmittanceMapping;
+	}
+
+	get inscatterMapping() {
+		return this._inscatterMapping;
+	}
+
+	get use3DInscatterTexture() {
+		return this._use3DInscatterTexture;
 	}
 
 	computeTransmittance(renderer) {

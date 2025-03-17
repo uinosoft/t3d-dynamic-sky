@@ -1,9 +1,14 @@
 import { AtmosphereCommon } from './chunks/AtmosphereCommon.js';
 import { TransmittanceLookup } from './chunks/TransmittanceLookup.js';
+import { InscatterLookup } from './chunks/InscatterLookup.js';
 
 export const SkyShader = {
 	name: 'sky_bg',
 	defines: {
+		TRANSMITTANCE_MAPPING: 1,
+		INSCATTER_MAPPING: 1,
+		INSCATTER_3D: false,
+
 		SKY_MULTISAMPLE: true,
 		SKY_SUNDISK: true,
 		COLORSPACE_GAMMA: true,
@@ -117,7 +122,12 @@ export const SkyShader = {
 
         uniform float _SkyboxOcean;
 
-        uniform sampler2D _Inscatter;
+		#ifdef INSCATTER_3D
+			 uniform highp sampler3D _Inscatter;
+		#else
+			 uniform sampler2D _Inscatter;
+		#endif
+       
         uniform sampler2D _Transmittance;
 
         uniform vec4 _NightHorizonColor;
@@ -147,6 +157,8 @@ export const SkyShader = {
         const float RL = 6421000.0;
 
 		${AtmosphereCommon}
+		${TransmittanceLookup}
+		${InscatterLookup}
 
         #ifdef FIX_INSCATTER_SAMPLE
             float fixU(float u) {
@@ -154,66 +166,6 @@ export const SkyShader = {
                 return 3.0 / RES_NU + fixNumber;
             }
         #endif
-
-        vec4 Texture4D(sampler2D table, float r, float mu, float muS, float nu) {
-            float H = sqrt(Rt * Rt - Rg * Rg);
-            float rho = sqrt(r * r - Rg * Rg);
-            #ifdef INSCATTER_NON_LINEAR
-                float rmu = r * mu;
-                float delta = rmu * rmu - r * r + Rg * Rg;
-                vec4 cst = rmu < 0.0 && delta > 0.0 ? vec4(1.0, 0.0, 0.0, 0.5 - 0.5 / RES_MU) : vec4(-1.0, H * H, H, 0.5 + 0.5 / RES_MU);     
-                float uR = 0.5 / RES_R + rho / H * (1.0 - 1.0 / RES_R);
-                float uMu = cst.w + (rmu * cst.x + sqrt(delta + cst.y)) / (rho + cst.z) * (0.5 - 1.0 / float(RES_MU));
-
-                // paper formula
-                // float uMuS = 0.5 / RES_MU_S + max((1.0 - exp(-3.0 * muS - 0.6)) / (1.0 - exp(-3.6)), 0.0) * (1.0 - 1.0 / RES_MU_S);
-                // better formula
-                float uMuS = 0.5 / RES_MU_S + (atan(max(muS, -0.1975) * tan(1.26 * 0.75)) / 0.75 + (1.0 - 0.26)) * 0.5 * (1.0 - 1.0 / RES_MU_S);
-
-                if (_SkyboxOcean < 0.5) {
-                    uMu = rmu < 0.0 && delta > 0.0 ? 0.975 : uMu * 0.975 + 0.015 * uMuS; // 0.975 to fix the horizion seam. 0.015 to fix zenith artifact
-                }
-            #else
-                float uR = 0.5 / RES_R + rho / H * (1.0 - 1.0 / RES_R);
-                float uMu = 0.5 / RES_MU + (mu + 1.0) / 2.0 * (1.0 - 1.0 / RES_MU);
-                float uMuS = 0.5 / RES_MU_S + max(muS + 0.2, 0.0) / 1.2 * (1.0 - 1.0 / RES_MU_S);
-            #endif
-            float lep = (nu + 1.0) / 2.0 * (RES_NU - 1.0);
-            float uNu = floor(lep);
-            lep = lep - uNu;
-
-            // Original 3D lookup
-            // return tex3D(table, float3((uNu + uMuS) / RES_NU, uMu, uR)) * (1.0 - lep) + tex3D(table, float3((uNu + uMuS + 1.0) / RES_NU, uMu, uR)) * lep;
-
-            float uNu_uMuS = uNu + uMuS;
-
-            #ifdef SKY_MULTISAMPLE  
-                // new 2D lookup
-                float u_0 = floor(uR * RES_R) / RES_R;
-                float u_1 = floor(uR * RES_R + 1.0) / RES_R;
-                float u_frac = fract(uR * RES_R);
-
-                // pre-calculate uv
-                float uv_0X = uNu_uMuS / RES_NU;
-                float uv_1X = (uNu_uMuS + 1.0) / RES_NU;
-                float uv_0Y = uMu / RES_R + u_0;
-                float uv_1Y = uMu / RES_R + u_1;
-                float OneMinusLep = 1.0 - lep;
-
-                #ifdef FIX_INSCATTER_SAMPLE
-                    uv_0X = fixU(uv_0X);
-                    uv_1X = fixU(uv_1X);
-                #endif
-
-                vec4 A = texture2D(table, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_0Y)) * lep;	
-                vec4 B = texture2D(table, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_1Y)) * lep;	
-
-                return A * (1.0 - u_frac) + B * u_frac;
-
-            #else	
-                return texture2D(table, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(table, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
-            #endif
-        }
 
         vec3 GetMie(vec4 rayMie) {	
             // approximated single Mie scattering (cf. approximate Cm in paragraph "Angular precision")
@@ -233,8 +185,6 @@ export const SkyShader = {
 			// we will multiply (1.0 + mu * mu) together with Rayleigh phase later.
 			return miePhase_g.x / pow(miePhase_g.y - miePhase_g.z * mu, 1.5);
 		}
-
-        ${TransmittanceLookup}
 
         const vec3 EARTH_POS = vec3(0.0, 6360010.0, 0.0);
         const float SUN_BRIGHTNESS = 40.0;
@@ -260,7 +210,7 @@ export const SkyShader = {
             // float nu = dot(viewdir, _SunDirSize.xyz); // nu value is from function input
             float muS = dot(camera, _SunDirSize.xyz) / r;
 
-            vec4 inScatter = Texture4D(_Inscatter, r, rMu / r, muS, nu);
+            vec4 inScatter = Inscatter(_Inscatter, r, rMu / r, muS, nu);
 
             extinction = Transmittance(r, mu);
 

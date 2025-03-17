@@ -36,23 +36,39 @@ export const InscatterShader = {
 
         varying vec2 v_Uv;
 
-        const float epsion = 0.000000001;
+		const float epsion = 1e-9;
         
         //----------------------------------------------------------------------------------------------------
+
+		float GetUnitRangeFromTextureCoord(float u, float textureSize) {
+			return (u - 0.5 / textureSize) / (1.0 - 1.0 / textureSize);
+		}
         
-        void GetMuMuSNu(vec2 coord, float r, vec4 dhdH, out float mu, out float muS, out float nu) { 
-            float x = coord.x * float(RES_MU_S * RES_NU) - 0.5;
-            float y = coord.y * float(RES_MU) - 0.5;
+        void GetRMuMuSNuFromScatteringUvw(vec3 uvw, out float r, out float mu, out float muS, out float nu) { 
+            float x = uvw.x * RES_MU_S * RES_NU - 0.5;
+            float y = uvw.y * RES_MU - 0.5;
+
+			float H = sqrt(Rt * Rt - Rg * Rg);
+			float rho = H * GetUnitRangeFromTextureCoord(uvw.z, RES_R_TOTAL);
+			r = sqrt(rho * rho + Rg * Rg);
         
             #if INSCATTER_MAPPING == 1
                 if (y < float(RES_MU) / 2.0) { // bottom half
-                    float d = 1.0 - y / (float(RES_MU) / 2.0 - 1.0); 
-                    d = min(max(dhdH.z, d * dhdH.w), dhdH.w * 0.999); 
-                    mu = (Rg * Rg - r * r - d * d) / (2.0 * r * d); 
+					float dmin = r - Rg;
+					float dmax = rho;
+					float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvw.y, RES_MU / 2.0);
+					mu = -(rho * rho + d * d) / (2.0 * r * d);
+					// original clamp
+					// mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
+					// current clamp
                     mu = min(mu, -sqrt(1.0 - (Rg / r) * (Rg / r)) - 0.001); 
                 } else { 
-                    float d = (y - float(RES_MU) / 2.0) / (float(RES_MU) / 2.0 - 1.0); 
-                    d = min(max(dhdH.x, d * dhdH.y), dhdH.y * 0.999); 
+				 	float dmin = Rt - r;
+					float dmax = rho + H;
+
+                    float d = (y - float(RES_MU) / 2.0) / (float(RES_MU) / 2.0 - 1.0);
+
+                    d = min(max(dmin, d * dmax), dmax * 0.999); 
                     mu = (Rt * Rt - r * r - d * d) / (2.0 * r * d); 
                 } 
                 muS = mod(x, float(RES_MU_S)) / (float(RES_MU_S) - 1.0);
@@ -156,19 +172,11 @@ export const InscatterShader = {
 				}
 			#endif
 
-			float r = layer / max((RES_R_TOTAL - 1.0), 1.0);
-            r = r * r;
-            r = sqrt(Rg * Rg + r * (Rt * Rt - Rg * Rg)) + (abs(layer - 0.) < epsion ? 0.01 : (abs(layer - (RES_R_TOTAL - 1.)) < epsion ? -0.001 : 0.0));
-            
-            float dmin = Rt - r;
-            float dmax = sqrt(r * r - Rg * Rg) + sqrt(Rt * Rt - Rg * Rg);
-            float dminp = r - Rg;
-            float dmaxp = sqrt(r * r - Rg * Rg);
-        
-            vec4 dhdH = vec4(dmin, dmax, dminp, dmaxp);
+			float z = layer / max((RES_R_TOTAL - 1.0), 1.0);
+			vec3 uvw = vec3(uv, z);
 			
-            float mu, muS, nu;
-            GetMuMuSNu(uv, r, dhdH, mu, muS, nu);
+            float r, mu, muS, nu;
+            GetRMuMuSNuFromScatteringUvw(uvw, r, mu, muS, nu);
 
 			vec3 ray;
             float mie; // only calc the red channel

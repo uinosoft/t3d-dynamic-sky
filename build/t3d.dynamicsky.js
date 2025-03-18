@@ -1033,23 +1033,26 @@ vec3 ComputeTransmittance(vec2 uv) {
 			r = sqrt(rho * rho + Rg * Rg);
 				
 						#if INSCATTER_MAPPING == 1
-								if (y < float(RES_MU) / 2.0) { // bottom half
+								if (uvw.y < 0.5) { // bottom half
 					float dmin = r - Rg;
 					float dmax = rho;
 					float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvw.y, RES_MU / 2.0);
 					mu = -(rho * rho + d * d) / (2.0 * r * d);
-					// original clamp
+					// clamp
 					// mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
-					// current clamp
 										mu = min(mu, -sqrt(1.0 - (Rg / r) * (Rg / r)) - 0.001); 
 								} else { 
 				 	float dmin = Rt - r;
 					float dmax = rho + H;
 
-										float d = (y - float(RES_MU) / 2.0) / (float(RES_MU) / 2.0 - 1.0);
+					float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvw.y - 1., RES_MU / 2.0);
+					mu = (H * H - rho * rho - d * d) / (2.0 * r * d);
+					mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0);
 
-										d = min(max(dmin, d * dmax), dmax * 0.999); 
-										mu = (Rt * Rt - r * r - d * d) / (2.0 * r * d); 
+										// float d = (y - float(RES_MU) / 2.0) / (float(RES_MU) / 2.0 - 1.0);
+
+										// d = min(max(dmin, d * dmax), dmax * 0.999); 
+										// mu = (Rt * Rt - r * r - d * d) / (2.0 * r * d); 
 								} 
 								muS = mod(x, float(RES_MU_S)) / (float(RES_MU_S) - 1.0);
 								// paper formula 

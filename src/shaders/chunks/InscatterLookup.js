@@ -39,7 +39,7 @@ vec4 Inscatter(sampler2D table, float r, float mu, float muS, float nu) {
 		}
 	#else
 		float uMu = GetTextureCoordFromUnitRange((mu + 1.0) / 2.0, RES_MU);
-		float uMuS = GetTextureCoordFromUnitRange(max(muS + 0.2, 0.0) / 1.2, RES_MU_S) 0.5 / RES_MU_S +  * (1.0 - 1.0 / RES_MU_S);
+		float uMuS = GetTextureCoordFromUnitRange(max(muS + 0.2, 0.0) / 1.2, RES_MU_S);
 	#endif
 
 	float lep = (nu + 1.0) / 2.0 * (RES_NU - 1.0);

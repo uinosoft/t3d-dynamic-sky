@@ -35,8 +35,6 @@ export const InscatterShader = {
 		#endif
 
         varying vec2 v_Uv;
-
-		const float epsion = 1e-9;
         
         //----------------------------------------------------------------------------------------------------
 
@@ -46,7 +44,9 @@ export const InscatterShader = {
         
         void GetRMuMuSNuFromScatteringUvw(vec3 uvw, out float r, out float mu, out float muS, out float nu) { 
             float x = uvw.x * RES_MU_S * RES_NU - 0.5;
-            float y = uvw.y * RES_MU - 0.5;
+
+            float xNu = floor(x / RES_MU_S) / (RES_NU - 1.0);
+            float xMuS = mod(x, RES_MU_S) / (RES_MU_S - 1.0);
 
 			float H = sqrt(Rt * Rt - Rg * Rg);
 			float rho = H * GetUnitRangeFromTextureCoord(uvw.z, RES_R_TOTAL);
@@ -61,31 +61,23 @@ export const InscatterShader = {
 					// clamp
 					// mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
                     mu = min(mu, -sqrt(1.0 - (Rg / r) * (Rg / r)) - 0.001); 
-                } else { 
+                } else {
 				 	float dmin = Rt - r;
 					float dmax = rho + H;
-
 					float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvw.y - 1., RES_MU / 2.0);
 					mu = (H * H - rho * rho - d * d) / (2.0 * r * d);
-					mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0);
-
-                    // float d = (y - float(RES_MU) / 2.0) / (float(RES_MU) / 2.0 - 1.0);
-
-                    // d = min(max(dmin, d * dmax), dmax * 0.999); 
-                    // mu = (Rt * Rt - r * r - d * d) / (2.0 * r * d); 
-                } 
-                muS = mod(x, float(RES_MU_S)) / (float(RES_MU_S) - 1.0);
+					mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0); 
+                }
                 // paper formula 
-                // muS = -(0.6 + log(1.0 - muS * (1.0 -  exp(-3.6)))) / 3.0; 
+                // muS = -(0.6 + log(1.0 - xMuS * (1.0 -  exp(-3.6)))) / 3.0; 
                 // better formula 
-                muS = tan((2.0 * muS - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75); 
-                nu = -1.0 + floor(x / float(RES_MU_S)) / (float(RES_NU) - 1.0) * 2.0; 
+                muS = tan((2.0 * xMuS - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75);
             #else 
-                mu = -1.0 + 2.0 * y / (float(RES_MU) - 1.0); 
-                muS = mod(x, float(RES_MU_S)) / (float(RES_MU_S) - 1.0); 
-                muS = -0.2 + muS * 1.2; 
-                nu = -1.0 + floor(x / float(RES_MU_S)) / (float(RES_NU) - 1.0) * 2.0;
-            #endif 
+                mu = -1.0 + 2.0 * GetUnitRangeFromTextureCoord(uvw.y, RES_MU);
+                muS = -0.2 + xMuS * 1.2;
+            #endif
+
+            nu = -1.0 + xNu * 2.0;
         }
 
         // ---------------------------------------------------------------------------- 

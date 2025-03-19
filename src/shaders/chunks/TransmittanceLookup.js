@@ -27,8 +27,21 @@ export const TransmittanceLookup = `
 
 // transmittance(=transparency) of atmosphere for infinite ray (r, mu)
 // (mu = cos(view zenith angle)), intersections with ground ignored
-vec3 Transmittance(float r, float mu) {
+vec3 GetTransmittanceToTopAtmosphereBoundary(float r, float mu) {
 	vec2 uv = GetTransmittanceUvFromRMu(r, mu);
 	return texture2D(_Transmittance, uv).rgb;
+}
+
+// transmittance(=transparency) of atmosphere between x and x0
+// assume segment x, x0 not intersecting ground 
+// d = distance between x and x0, mu = cos(zenith angle of [x,x0) ray at x) 
+vec3 GetTransmittance(float r, float mu, float d) {
+	float r_d = sqrt(r * r + d * d + 2.0 * r * mu * d);
+	float mu_d = (r * mu + d) / r_d;
+	if (mu > 0.0) {
+		return min(GetTransmittanceToTopAtmosphereBoundary(r, mu) / GetTransmittanceToTopAtmosphereBoundary(r_d, mu_d), 1.0); 
+	} else {
+		return min(GetTransmittanceToTopAtmosphereBoundary(r_d, -mu_d) / GetTransmittanceToTopAtmosphereBoundary(r, -mu), 1.0); 
+	}
 }
 `;

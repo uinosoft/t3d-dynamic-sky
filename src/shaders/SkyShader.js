@@ -210,9 +210,9 @@ export const SkyShader = {
             // float nu = dot(viewdir, _SunDirSize.xyz); // nu value is from function input
             float muS = dot(camera, _SunDirSize.xyz) / r;
 
-            vec4 inScatter = Inscatter(_Inscatter, r, rMu / r, muS, nu);
+            vec4 inScatter = GetScattering(r, rMu / r, muS, nu);
 
-            extinction = Transmittance(r, mu);
+            extinction = GetTransmittanceToTopAtmosphereBoundary(r, mu);
 
             if(r <= Rt) {
                 vec3 inScatterM = GetMie(inScatter);

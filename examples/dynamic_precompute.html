@@ -60,12 +60,10 @@
 
 		let skyPrecomputeUtil, transmittanceHelper, inscatterHelper;
 
-		function precompute(use3DInscatterTexture = true) {
+		function precompute() {
 			clear();
 
-			skyPrecomputeUtil = new SkyPrecomputeUtil(renderer.capabilities, {
-				use3DInscatterTexture
-			});
+			skyPrecomputeUtil = new SkyPrecomputeUtil(renderer.capabilities, precomputeOptions);
 			// skyPrecomputeUtil.setBetaRayleighDensity(new t3d.Vector3(680, 550, 440), new t3d.Color3(128 / 255, 128 / 255, 128 / 255, 255 / 255), 1.0);
 
 			console.time('computeTransmittance');
@@ -83,7 +81,7 @@
 
 			inscatterHelper = new PrecomputeHelper(skyPrecomputeUtil.inscatterTexture);
 			inscatterHelper.position.set(1.1, 0, 0);
-			if (use3DInscatterTexture) {
+			if (skyPrecomputeUtil.use3DInscatterTexture) {
 				inscatterHelper.scale.set(2, 0.5, 1);
 			} else {
 				inscatterHelper.scale.set(2, 1, 2);
@@ -106,15 +104,22 @@
 				scene.remove(inscatterHelper);
 			}
 		}
+
+		const precomputeOptions = {
+			transmittanceMapping: 1,
+			inscatterMapping: 1,
+			use3DInscatterTexture: true
+		};
 		
-		precompute(false);
+		precompute();
 
 		// gui
 
 		const gui = new GUI();
-		gui.add({ inscatter: '2D' }, 'inscatter', ['2D', '3D']).onChange(value => {
-			precompute(value === '3D');
-		}).name('Inscatter Texture');
+		gui.onChange(precompute);
+		gui.add(precomputeOptions, 'transmittanceMapping', { 'Linear': 0, 'Mapping-2008': 1, 'Mapping-2017': 2 }).name('Transmittance Mapping');
+		gui.add(precomputeOptions, 'inscatterMapping', { 'Linear': 0, 'Non-Linear': 1 }).name('Inscatter Mapping');
+		gui.add(precomputeOptions, 'use3DInscatterTexture').name('3D Inscatter');
 
 		//
 

@@ -3,13 +3,12 @@ float GetTextureCoordFromUnitRange(float x, float textureSize) {
 	return 0.5 / textureSize + x * (1.0 - 1.0 / textureSize);
 }
 
-#ifdef INSCATTER_3D
-vec4 Inscatter(highp sampler3D table, float r, float mu, float muS, float nu) {
-	float resR = RES_R_TOTAL;
-#else
-vec4 Inscatter(sampler2D table, float r, float mu, float muS, float nu) {
-	float resR = RES_R;
-#endif
+vec4 GetScattering(float r, float mu, float muS, float nu) {
+	#ifdef INSCATTER_3D
+		float resR = RES_R_TOTAL;
+	#else
+		float resR = RES_R;
+	#endif
 	float H = sqrt(Rt * Rt - Rg * Rg);
 	float rho = sqrt(r * r - Rg * Rg);
 	float uR = GetTextureCoordFromUnitRange(rho / H, resR);
@@ -49,7 +48,7 @@ vec4 Inscatter(sampler2D table, float r, float mu, float muS, float nu) {
 	float uNu_uMuS = uNu + uMuS;
 
 	#ifdef INSCATTER_3D
-		return texture(table, vec3(uNu_uMuS / RES_NU, uMu, uR)) * (1.0 - lep) + texture(table, vec3((uNu_uMuS + 1.0) / RES_NU, uMu, uR)) * lep;
+		return texture(_Inscatter, vec3(uNu_uMuS / RES_NU, uMu, uR)) * (1.0 - lep) + texture(_Inscatter, vec3((uNu_uMuS + 1.0) / RES_NU, uMu, uR)) * lep;
 	#else
 		#ifdef SKY_MULTISAMPLE  
 			// new 2D lookup
@@ -69,13 +68,13 @@ vec4 Inscatter(sampler2D table, float r, float mu, float muS, float nu) {
 				uv_1X = fixU(uv_1X);
 			#endif
 
-			vec4 A = texture2D(table, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_0Y)) * lep;	
-			vec4 B = texture2D(table, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_1Y)) * lep;	
+			vec4 A = texture2D(_Inscatter, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(_Inscatter, vec2(uv_1X, uv_0Y)) * lep;	
+			vec4 B = texture2D(_Inscatter, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(_Inscatter, vec2(uv_1X, uv_1Y)) * lep;	
 
 			return A * (1.0 - u_frac) + B * u_frac;
 
 		#else	
-			return texture2D(table, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(table, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
+			return texture2D(_Inscatter, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(_Inscatter, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
 		#endif
 	#endif 
 }

@@ -2874,9 +2874,22 @@ const TransmittanceLookup = `
 
 // transmittance(=transparency) of atmosphere for infinite ray (r, mu)
 // (mu = cos(view zenith angle)), intersections with ground ignored
-vec3 Transmittance(float r, float mu) {
+vec3 GetTransmittanceToTopAtmosphereBoundary(float r, float mu) {
 	vec2 uv = GetTransmittanceUvFromRMu(r, mu);
 	return texture2D(_Transmittance, uv).rgb;
+}
+
+// transmittance(=transparency) of atmosphere between x and x0
+// assume segment x, x0 not intersecting ground 
+// d = distance between x and x0, mu = cos(zenith angle of [x,x0) ray at x) 
+vec3 GetTransmittance(float r, float mu, float d) {
+	float r_d = sqrt(r * r + d * d + 2.0 * r * mu * d);
+	float mu_d = (r * mu + d) / r_d;
+	if (mu > 0.0) {
+		return min(GetTransmittanceToTopAtmosphereBoundary(r, mu) / GetTransmittanceToTopAtmosphereBoundary(r_d, mu_d), 1.0); 
+	} else {
+		return min(GetTransmittanceToTopAtmosphereBoundary(r_d, -mu_d) / GetTransmittanceToTopAtmosphereBoundary(r, -mu), 1.0); 
+	}
 }
 `;
 
@@ -2885,13 +2898,12 @@ float GetTextureCoordFromUnitRange(float x, float textureSize) {
 	return 0.5 / textureSize + x * (1.0 - 1.0 / textureSize);
 }
 
-#ifdef INSCATTER_3D
-vec4 Inscatter(highp sampler3D table, float r, float mu, float muS, float nu) {
-	float resR = RES_R_TOTAL;
-#else
-vec4 Inscatter(sampler2D table, float r, float mu, float muS, float nu) {
-	float resR = RES_R;
-#endif
+vec4 GetScattering(float r, float mu, float muS, float nu) {
+	#ifdef INSCATTER_3D
+		float resR = RES_R_TOTAL;
+	#else
+		float resR = RES_R;
+	#endif
 	float H = sqrt(Rt * Rt - Rg * Rg);
 	float rho = sqrt(r * r - Rg * Rg);
 	float uR = GetTextureCoordFromUnitRange(rho / H, resR);
@@ -2921,7 +2933,7 @@ vec4 Inscatter(sampler2D table, float r, float mu, float muS, float nu) {
 		}
 	#else
 		float uMu = GetTextureCoordFromUnitRange((mu + 1.0) / 2.0, RES_MU);
-		float uMuS = GetTextureCoordFromUnitRange(max(muS + 0.2, 0.0) / 1.2, RES_MU_S) 0.5 / RES_MU_S +  * (1.0 - 1.0 / RES_MU_S);
+		float uMuS = GetTextureCoordFromUnitRange(max(muS + 0.2, 0.0) / 1.2, RES_MU_S);
 	#endif
 
 	float lep = (nu + 1.0) / 2.0 * (RES_NU - 1.0);
@@ -2931,7 +2943,7 @@ vec4 Inscatter(sampler2D table, float r, float mu, float muS, float nu) {
 	float uNu_uMuS = uNu + uMuS;
 
 	#ifdef INSCATTER_3D
-		return texture(table, vec3(uNu_uMuS / RES_NU, uMu, uR)) * (1.0 - lep) + texture(table, vec3((uNu_uMuS + 1.0) / RES_NU, uMu, uR)) * lep;
+		return texture(_Inscatter, vec3(uNu_uMuS / RES_NU, uMu, uR)) * (1.0 - lep) + texture(_Inscatter, vec3((uNu_uMuS + 1.0) / RES_NU, uMu, uR)) * lep;
 	#else
 		#ifdef SKY_MULTISAMPLE  
 			// new 2D lookup
@@ -2951,13 +2963,13 @@ vec4 Inscatter(sampler2D table, float r, float mu, float muS, float nu) {
 				uv_1X = fixU(uv_1X);
 			#endif
 
-			vec4 A = texture2D(table, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_0Y)) * lep;	
-			vec4 B = texture2D(table, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(table, vec2(uv_1X, uv_1Y)) * lep;	
+			vec4 A = texture2D(_Inscatter, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(_Inscatter, vec2(uv_1X, uv_0Y)) * lep;	
+			vec4 B = texture2D(_Inscatter, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(_Inscatter, vec2(uv_1X, uv_1Y)) * lep;	
 
 			return A * (1.0 - u_frac) + B * u_frac;
 
 		#else	
-			return texture2D(table, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(table, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
+			return texture2D(_Inscatter, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(_Inscatter, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
 		#endif
 	#endif 
 }
@@ -3171,9 +3183,9 @@ const SkyShader = {
             // float nu = dot(viewdir, _SunDirSize.xyz); // nu value is from function input
             float muS = dot(camera, _SunDirSize.xyz) / r;
 
-            vec4 inScatter = Inscatter(_Inscatter, r, rMu / r, muS, nu);
+            vec4 inScatter = GetScattering(r, rMu / r, muS, nu);
 
-            extinction = Transmittance(r, mu);
+            extinction = GetTransmittanceToTopAtmosphereBoundary(r, mu);
 
             if(r <= Rt) {
                 vec3 inScatterM = GetMie(inScatter);
@@ -3453,6 +3465,93 @@ const TransmittanceShader = {
     `
 };
 
+const InscatterCompute = `
+float GetUnitRangeFromTextureCoord(float u, float textureSize) {
+	return (u - 0.5 / textureSize) / (1.0 - 1.0 / textureSize);
+}
+
+void GetRMuMuSNuFromScatteringUvw(vec3 uvw, out float r, out float mu, out float muS, out float nu) { 
+	float x = uvw.x * RES_MU_S * RES_NU - 0.5;
+
+	float xNu = floor(x / RES_MU_S) / (RES_NU - 1.0);
+	float xMuS = mod(x, RES_MU_S) / (RES_MU_S - 1.0);
+
+	float H = sqrt(Rt * Rt - Rg * Rg);
+	float rho = H * GetUnitRangeFromTextureCoord(uvw.z, RES_R_TOTAL);
+	r = sqrt(rho * rho + Rg * Rg);
+
+	#if INSCATTER_MAPPING == 1
+		if (uvw.y < 0.5) { // bottom half
+			float dmin = r - Rg;
+			float dmax = rho;
+			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvw.y, RES_MU / 2.0);
+			mu = -(rho * rho + d * d) / (2.0 * r * d);
+			// clamp
+			// mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
+			mu = min(mu, -sqrt(1.0 - (Rg / r) * (Rg / r)) - 0.001); 
+		} else {
+			float dmin = Rt - r;
+			float dmax = rho + H;
+			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvw.y - 1., RES_MU / 2.0);
+			mu = (H * H - rho * rho - d * d) / (2.0 * r * d);
+			mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0); 
+		}
+		// paper formula 
+		// muS = -(0.6 + log(1.0 - xMuS * (1.0 -  exp(-3.6)))) / 3.0; 
+		// better formula 
+		muS = tan((2.0 * xMuS - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75);
+	#else 
+		mu = -1.0 + 2.0 * GetUnitRangeFromTextureCoord(uvw.y, RES_MU);
+		muS = -0.2 + xMuS * 1.2;
+	#endif
+
+	nu = -1.0 + xNu * 2.0;
+}
+
+void ComputeSingleScatteringIntegrand(float r, float mu, float muS, float nu, float d, out vec3 rayleigh, out float mie) { 
+	rayleigh = vec3(0.,0.,0.); 
+	mie = 0.0; // single channel only
+	float ri = sqrt(r * r + d * d + 2.0 * r * mu * d); 
+	float muSi = (nu * d + muS * r) / (ri * mix(1.0, betaR.w, max(0.0, muS))); // added betaR.w to fix the Rayleigh Offset artifacts issue
+	ri = max(Rg, ri);
+	if (muSi >= -sqrt(1.0 - Rg * Rg / (ri * ri))) { 
+		vec3 transmittance = GetTransmittance(r, mu, d) * GetTransmittanceToTopAtmosphereBoundary(ri, muSi); 
+		rayleigh = exp(-(ri - Rg) / HR) * transmittance; 
+		mie = exp(-(ri - Rg) / HM) * transmittance.x; // only calc the red channel
+	}
+}
+
+void ComputeSingleScattering(float r, float mu, float muS, float nu, out vec3 ray, out float mie) {
+	ray = vec3(0., 0., 0.);
+	mie = 0.0; // single channel only
+
+	float dx = Limit(r, mu) / float(INSCATTER_INTEGRAL_SAMPLES);
+
+	vec3 rayi;
+	float miei;
+
+	ComputeSingleScatteringIntegrand(r, mu, muS, nu, 0.0, rayi, miei);
+
+	for (int i = 1; i <= INSCATTER_INTEGRAL_SAMPLES; ++i) {
+		float xj = float(i) * dx; 
+
+		vec3 rayj;
+		float miej;
+
+		ComputeSingleScatteringIntegrand(r, mu, muS, nu, xj, rayj, miej);
+		
+		ray += (rayi + rayj) / 2.0 * dx;
+		mie += (miei + miej) / 2.0 * dx;
+
+		rayi = rayj;
+		miei = miej;
+	}
+	
+	ray *= betaR.xyz;
+	mie *= betaMSca.x;
+}
+`;
+
 const InscatterShader = {
 	name: 'sky_inscatter',
 	defines: {},
@@ -3487,123 +3586,8 @@ const InscatterShader = {
 
         varying vec2 v_Uv;
 
-		const float epsion = 1e-9;
-        
-        //----------------------------------------------------------------------------------------------------
-
-		float GetUnitRangeFromTextureCoord(float u, float textureSize) {
-			return (u - 0.5 / textureSize) / (1.0 - 1.0 / textureSize);
-		}
-        
-        void GetRMuMuSNuFromScatteringUvw(vec3 uvw, out float r, out float mu, out float muS, out float nu) { 
-            float x = uvw.x * RES_MU_S * RES_NU - 0.5;
-            float y = uvw.y * RES_MU - 0.5;
-
-			float H = sqrt(Rt * Rt - Rg * Rg);
-			float rho = H * GetUnitRangeFromTextureCoord(uvw.z, RES_R_TOTAL);
-			r = sqrt(rho * rho + Rg * Rg);
-        
-            #if INSCATTER_MAPPING == 1
-                if (uvw.y < 0.5) { // bottom half
-					float dmin = r - Rg;
-					float dmax = rho;
-					float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvw.y, RES_MU / 2.0);
-					mu = -(rho * rho + d * d) / (2.0 * r * d);
-					// clamp
-					// mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
-                    mu = min(mu, -sqrt(1.0 - (Rg / r) * (Rg / r)) - 0.001); 
-                } else { 
-				 	float dmin = Rt - r;
-					float dmax = rho + H;
-
-					float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvw.y - 1., RES_MU / 2.0);
-					mu = (H * H - rho * rho - d * d) / (2.0 * r * d);
-					mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0);
-
-                    // float d = (y - float(RES_MU) / 2.0) / (float(RES_MU) / 2.0 - 1.0);
-
-                    // d = min(max(dmin, d * dmax), dmax * 0.999); 
-                    // mu = (Rt * Rt - r * r - d * d) / (2.0 * r * d); 
-                } 
-                muS = mod(x, float(RES_MU_S)) / (float(RES_MU_S) - 1.0);
-                // paper formula 
-                // muS = -(0.6 + log(1.0 - muS * (1.0 -  exp(-3.6)))) / 3.0; 
-                // better formula 
-                muS = tan((2.0 * muS - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75); 
-                nu = -1.0 + floor(x / float(RES_MU_S)) / (float(RES_NU) - 1.0) * 2.0; 
-            #else 
-                mu = -1.0 + 2.0 * y / (float(RES_MU) - 1.0); 
-                muS = mod(x, float(RES_MU_S)) / (float(RES_MU_S) - 1.0); 
-                muS = -0.2 + muS * 1.2; 
-                nu = -1.0 + floor(x / float(RES_MU_S)) / (float(RES_NU) - 1.0) * 2.0;
-            #endif 
-        }
-
-        // ---------------------------------------------------------------------------- 
-        // TRANSMITTANCE FUNCTIONS
-        // ----------------------------------------------------------------------------
-		
 		${TransmittanceLookup}
-
-        // transmittance(=transparency) of atmosphere between x and x0
-        // assume segment x, x0 not intersecting ground 
-        // d = distance between x and x0, mu = cos(zenith angle of [x,x0) ray at x) 
-        vec3 Transmittance(float r, float mu, float d) { 
-            vec3 result; 
-            float r1 = sqrt(r * r + d * d + 2.0 * r * mu * d); 
-            float mu1 = (r * mu + d) / r1;
-            if (mu > 0.0) { 
-                result = min(Transmittance(r, mu) / Transmittance(r1, mu1), 1.0); 
-            } else { 
-                result = min(Transmittance(r1, -mu1) / Transmittance(r, -mu), 1.0); 
-            } 
-        
-            return result;
-        }
-
-        // ---------------------------------------------------------------------------- 
-        // INSCATTER FUNCTIONS 
-        // ---------------------------------------------------------------------------- 
-
-        void Integrand(float r, float mu, float muS, float nu, float t, out vec3 ray, out float mie) { 
-            ray = vec3(0.,0.,0.); 
-            mie = 0.0; // single channel only
-            float ri = sqrt(r * r + t * t + 2.0 * r * mu * t); 
-            float muSi = (nu * t + muS * r) / (ri * mix(1.0, betaR.w, max(0.0, muS))); // added betaR.w to fix the Rayleigh Offset artifacts issue
-            ri = max(Rg, ri);
-            if (muSi >= -sqrt(1.0 - Rg * Rg / (ri * ri))) 
-            { 
-                vec3 ti = Transmittance(r, mu, t) * Transmittance(ri, muSi); 
-                ray = exp(-(ri - Rg) / HR) * ti; 
-                mie = exp(-(ri - Rg) / HM) * ti.x; // only calc the red channel
-            }
-        } 
-        
-        void Inscatter(float r, float mu, float muS, float nu, out vec3 ray, out float mie) { 
-            ray = vec3(0., 0., 0.); 
-            mie = 0.0; // single channel only
-            float dx = Limit(r, mu) / float(INSCATTER_INTEGRAL_SAMPLES);
-            float xi = 0.0;
-            vec3 rayi;
-            float miei;
-            Integrand(r, mu, muS, nu, 0.0, rayi, miei);
-        
-            for (int i = 1; i <= INSCATTER_INTEGRAL_SAMPLES; ++i) { 
-                float xj = float(i) * dx; 
-                vec3 rayj; 
-                float miej; 
-                Integrand(r, mu, muS, nu, xj, rayj, miej); 
-                
-                ray += (rayi + rayj) / 2.0 * dx; 
-                mie += (miei + miej) / 2.0 * dx; 
-                xi = xj; 
-                rayi = rayj; 
-                miei = miej; 
-            } 
-            
-            ray *= betaR.xyz; 
-            mie *= betaMSca.x;
-        } 
+		${InscatterCompute} 
         
         void main() {
 			vec2 uv = v_Uv;
@@ -3634,7 +3618,7 @@ const InscatterShader = {
 
 			vec3 ray;
             float mie; // only calc the red channel
-            Inscatter(r, mu, muS, nu, ray, mie); 
+            ComputeSingleScattering(r, mu, muS, nu, ray, mie);
             
             // store only red component of single Mie scattering (cf. 'Angular precision')
             gl_FragColor = vec4(ray, mie);

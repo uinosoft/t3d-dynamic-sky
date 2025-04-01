@@ -45,12 +45,13 @@ export const InscatterShader = {
 
 			#ifndef INSCATTER_3D
 				float layer;
-				if (RES_R > 1.) {
-					float layerIndex = floor(uv.y * RES_R);
-					layerIndex = clamp(layerIndex, 0., RES_R - 1.);
+				float resR = float(ALTITUDE_LAYERS);
+				if (resR > 1.) {
+					float layerIndex = floor(uv.y * resR);
+					layerIndex = clamp(layerIndex, 0., resR - 1.);
 					layer = pow(2., layerIndex);
 
-					uv.y = uv.y * RES_R - layerIndex;
+					uv.y = uv.y * resR - layerIndex;
 					uv.y = clamp(uv.y, 0., 1.);
 
 					if (layerIndex < 0.5) {

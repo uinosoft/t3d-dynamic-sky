@@ -39,6 +39,11 @@ export class Sky extends Mesh {
 			needsUpdate = true;
 		}
 
+		if (defines.ALTITUDE_LAYERS !== skyPrecomputeUtil.altitudeLayers) {
+			defines.ALTITUDE_LAYERS = skyPrecomputeUtil.altitudeLayers;
+			needsUpdate = true;
+		}
+
 		this.material.needsUpdate = needsUpdate;
 	}
 

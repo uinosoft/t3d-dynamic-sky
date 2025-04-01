@@ -108,7 +108,8 @@
 		const precomputeOptions = {
 			transmittanceMapping: 1,
 			inscatterMapping: 1,
-			use3DInscatterTexture: true
+			use3DInscatterTexture: true,
+			altitudeLayers: 4
 		};
 		
 		precompute();
@@ -120,6 +121,7 @@
 		gui.add(precomputeOptions, 'transmittanceMapping', { 'Linear': 0, 'Mapping-2008': 1, 'Mapping-2017': 2 }).name('Transmittance Mapping');
 		gui.add(precomputeOptions, 'inscatterMapping', { 'Linear': 0, 'Non-Linear': 1 }).name('Inscatter Mapping');
 		gui.add(precomputeOptions, 'use3DInscatterTexture').name('3D Inscatter');
+		gui.add(precomputeOptions, 'altitudeLayers', [1, 4]).name('Altitude Layers');
 
 		//
 

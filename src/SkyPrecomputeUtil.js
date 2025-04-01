@@ -12,11 +12,20 @@ export class SkyPrecomputeUtil {
 		// 1 - original implementation in 2008
 		// 2 - new implementation in 2017
 		const transmittanceMapping = options.transmittanceMapping !== undefined ? options.transmittanceMapping : 1;
+
 		// Inscatter mapping
 		// 0 - linear implementation
 		// 1 - non-linear implementation
 		const inscatterMapping = options.inscatterMapping !== undefined ? options.inscatterMapping : 1;
+
+		// Whether to use 3D inscatter texture
 		const use3DInscatterTexture = options.use3DInscatterTexture !== undefined ? (options.use3DInscatterTexture && isWebGL2) : false;
+
+		// Number of layers to precompute for altitude
+		// If use3DInscatterTexture is true, this value is ignored, because the number of layers is fixed to 32
+		// If use3DInscatterTexture is false, and altitudeLayers is set to 4, the render layers are set to 1, 2, 4, 8
+		// If use3DInscatterTexture is false, and altitudeLayers is set to 1, the render layers are set to 1 only
+		const altitudeLayers = options.altitudeLayers !== undefined ? options.altitudeLayers : 4;
 
 		// ios provides a poor implementation of float linear, so fallback to Half Float
 		const isIOS = /(iPad|iPhone|iPod)/g.test(navigator.userAgent);
@@ -70,6 +79,7 @@ export class SkyPrecomputeUtil {
 		inscatterPass.material.defines.TRANSMITTANCE_MAPPING = transmittanceMapping;
 		inscatterPass.material.defines.INSCATTER_MAPPING = inscatterMapping;
 		inscatterPass.material.defines.INSCATTER_3D = !!use3DInscatterTexture;
+		inscatterPass.material.defines.ALTITUDE_LAYERS = altitudeLayers;
 
 		//
 
@@ -84,6 +94,7 @@ export class SkyPrecomputeUtil {
 		this._transmittanceMapping = transmittanceMapping;
 		this._inscatterMapping = inscatterMapping;
 		this._use3DInscatterTexture = use3DInscatterTexture;
+		this._altitudeLayers = altitudeLayers;
 	}
 
 	get transmittanceTexture() {
@@ -108,6 +119,10 @@ export class SkyPrecomputeUtil {
 
 	get use3DInscatterTexture() {
 		return this._use3DInscatterTexture;
+	}
+
+	get altitudeLayers() {
+		return this._altitudeLayers;
 	}
 
 	computeTransmittance(renderer) {

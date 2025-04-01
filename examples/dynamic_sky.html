@@ -49,8 +49,9 @@
 		const capabilities = forwardRenderer.capabilities;
 
 		const use3DInscatterTexture = true;
+		const altitudeLayers = 1;
 
-		const skyPrecomputeUtil = new SkyPrecomputeUtil(capabilities, { use3DInscatterTexture });
+		const skyPrecomputeUtil = new SkyPrecomputeUtil(capabilities, { use3DInscatterTexture, altitudeLayers });
 		skyPrecomputeUtil.computeTransmittance(forwardRenderer);
 		skyPrecomputeUtil.computeInscatter(forwardRenderer);
 
@@ -113,11 +114,12 @@
 		moonTexture.anisotropy = 16;
 
 		const skyMaterial = sky.material;
+		skyMaterial.defines.BACKGROUND = true;
 		skyMaterial.uniforms._MoonSampler = moonTexture;
 		skyMaterial.uniforms._OuterSpaceCube = cube_texture;
 		skyMaterial.uniforms._uSkyNightParams = [1, 0.1, 0.1];
 		skyMaterial.uniforms._SkyExposure = 0.6;
-		skyMaterial.uniforms._CameraFar = 800;
+		
 
 		const sphereGeometry = new t3d.SphereGeometry(1);
 
@@ -159,8 +161,11 @@
 
 		const gui = new GUI();
 
-		gui.add(skyMaterial.uniforms, '_SkyGroundOffset', 0, 2000, 1).name('Ground Offset');
-		gui.add(skyMaterial.uniforms, '_SkyAltitudeScale', 0, 100, 0.1).name('Altitude Scale');
+		const altitudeFolder = gui.addFolder('Altitude');
+		altitudeFolder.add(skyMaterial.defines, 'BACKGROUND').name('Fixed Altitude').onChange(value => {
+			skyMaterial.needsUpdate = true;
+		});
+		altitudeFolder.add(skyMaterial.uniforms, 'cameraHeight', 0, 60000).name('Altitude').listen();
 
 		gui.add(skyMaterial.uniforms, '_SkyboxOcean', 0, 1, 0.01).name('Skybox Ocean');
 
@@ -196,6 +201,10 @@
 			requestAnimationFrame(loop);
 
 			controller.update();
+
+			if (!skyMaterial.defines.BACKGROUND) {
+				skyMaterial.uniforms.cameraHeight = camera.position.y;
+			}
 
 			forwardRenderer.render(scene, camera);
 		}

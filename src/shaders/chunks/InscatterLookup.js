@@ -7,7 +7,7 @@ vec4 GetScattering(float r, float mu, float muS, float nu) {
 	#ifdef INSCATTER_3D
 		float resR = RES_R_TOTAL;
 	#else
-		float resR = RES_R;
+		float resR = float(ALTITUDE_LAYERS);
 	#endif
 	float H = sqrt(Rt * Rt - Rg * Rg);
 	float rho = sqrt(r * r - Rg * Rg);
@@ -50,29 +50,23 @@ vec4 GetScattering(float r, float mu, float muS, float nu) {
 	#ifdef INSCATTER_3D
 		return texture(_Inscatter, vec3(uNu_uMuS / RES_NU, uMu, uR)) * (1.0 - lep) + texture(_Inscatter, vec3((uNu_uMuS + 1.0) / RES_NU, uMu, uR)) * lep;
 	#else
-		#ifdef SKY_MULTISAMPLE  
+		#if ALTITUDE_LAYERS > 1
 			// new 2D lookup
-			float u_0 = floor(uR * RES_R) / RES_R;
-			float u_1 = floor(uR * RES_R + 1.0) / RES_R;
-			float u_frac = fract(uR * RES_R);
+			float u_0 = floor(uR * resR) / resR;
+			float u_1 = floor(uR * resR + 1.0) / resR;
+			float u_frac = fract(uR * resR);
 
 			// pre-calculate uv
 			float uv_0X = uNu_uMuS / RES_NU;
 			float uv_1X = (uNu_uMuS + 1.0) / RES_NU;
-			float uv_0Y = uMu / RES_R + u_0;
-			float uv_1Y = uMu / RES_R + u_1;
+			float uv_0Y = uMu / resR + u_0;
+			float uv_1Y = uMu / resR + u_1;
 			float OneMinusLep = 1.0 - lep;
-
-			#ifdef FIX_INSCATTER_SAMPLE
-				uv_0X = fixU(uv_0X);
-				uv_1X = fixU(uv_1X);
-			#endif
 
 			vec4 A = texture2D(_Inscatter, vec2(uv_0X, uv_0Y)) * OneMinusLep + texture2D(_Inscatter, vec2(uv_1X, uv_0Y)) * lep;	
 			vec4 B = texture2D(_Inscatter, vec2(uv_0X, uv_1Y)) * OneMinusLep + texture2D(_Inscatter, vec2(uv_1X, uv_1Y)) * lep;	
 
 			return A * (1.0 - u_frac) + B * u_frac;
-
 		#else	
 			return texture2D(_Inscatter, vec2(uNu_uMuS / RES_NU, uMu)) * (1.0 - lep) + texture2D(_Inscatter, vec2((uNu_uMuS + 1.0) / RES_NU, uMu)) * lep;	
 		#endif

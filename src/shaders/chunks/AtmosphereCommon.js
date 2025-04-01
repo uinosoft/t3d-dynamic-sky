@@ -2,7 +2,6 @@ export const AtmosphereCommon = `
 uniform vec4 betaR;
 
 const float RES_R_TOTAL = 32.; // all altitude layer
-const float RES_R = 4.; 	// 3D texture depth
 const float RES_MU = 128.; 	// height of the texture
 const float RES_MU_S = 32.; // width per table
 const float RES_NU = 8.;	// table per texture depth

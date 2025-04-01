@@ -8,19 +8,16 @@ export const SkyShader = {
 		TRANSMITTANCE_MAPPING: 1,
 		INSCATTER_MAPPING: 1,
 		INSCATTER_3D: false,
+		ALTITUDE_LAYERS: 4,
 
-		SKY_MULTISAMPLE: true,
+		BACKGROUND: false,
+
 		SKY_SUNDISK: true,
 		COLORSPACE_GAMMA: true,
-		SKY_HDR_MODE: false,
-		// fix bug in NIVIDIA 3080
-		FIX_INSCATTER_SAMPLE: false
+		SKY_HDR_MODE: false
 	},
 	uniforms: {
-		_CameraFar: 1000,
-
-		_SkyAltitudeScale: 1,
-		_SkyGroundOffset: 0,
+		cameraHeight: 0, // camera height to sealevel
 
 		_SkyMieG: 0.76,
 		_SkyMieScale: 1,
@@ -58,18 +55,17 @@ export const SkyShader = {
 		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1]
 	},
 	vertexShader: `
-        #define PI 3.14159
+        #define PI 3.14159265359
 
         attribute vec3 a_Position;
 
         uniform mat4 u_ProjectionView;
+		uniform mat4 u_Projection;
+		uniform mat4 u_View;
 		uniform mat4 u_Model;
         uniform vec3 u_CameraPosition;
 
-        uniform float _CameraFar;
-
-        uniform float _SkyAltitudeScale;
-        uniform float _SkyGroundOffset;
+        uniform float cameraHeight;
 
         uniform float _SkyMieG;
         uniform float _SkyMieScale;
@@ -92,11 +88,30 @@ export const SkyShader = {
             float g2 = g * g;
             return vec3(scale * 1.5 * (1.0 / (4.0 * PI)) * ((1.0 - g2) / (2.0 + g2)), 1.0 + g2, 2.0 * g);
         }
+
+		mat4 clearMat4Translate(mat4 m) {
+			mat4 outMatrix = m;
+			outMatrix[3].xyz = vec3(0., 0., 0.);
+			return outMatrix;
+		}
         
         void main() {
-            vWorldPosAndCamY.xyz = (u_Model * vec4(a_Position, 0.0)).xyz;
-            // if the camera height is outside atmospheric precomputed buffer range, it will occur rendering artifacts
-            vWorldPosAndCamY.w = max(u_CameraPosition.y * _SkyAltitudeScale + _SkyGroundOffset, 0.0); // no lower than sealevel
+			mat4 modelMatrix = clearMat4Translate(u_Model);
+			mat4 viewMatrix = clearMat4Translate(u_View);
+
+            vWorldPosAndCamY.xyz = (modelMatrix * vec4(a_Position, 0.0)).xyz;
+
+			#ifdef BACKGROUND
+				vWorldPosAndCamY.xyz = (modelMatrix * vec4(a_Position, 0.0)).xyz;
+			#else
+				vWorldPosAndCamY.xyz = a_Position;
+			#endif
+
+			vWorldPosAndCamY.w = max(cameraHeight, 0.0); // no lower than sealevel
+
+			gl_Position = u_Projection * viewMatrix * modelMatrix * vec4(a_Position, 1.0);
+			gl_Position.z = gl_Position.w;
+
             vMiePhase_g = PhaseFunctionG(_SkyMieG, _SkyMieScale);
 
             #ifdef SKY_SUNDISK
@@ -114,7 +129,7 @@ export const SkyShader = {
             vMoonTC = vec2(dot(right, normalize(a_Position)), dot(up, normalize(a_Position))) * _MoonDirSize.w + 0.5;
             vSpaceTC = (_SpaceRotationMatrix * vec4(a_Position, 0.0)).xyz;
 
-            gl_Position = u_ProjectionView * u_Model * vec4(a_Position * _CameraFar + u_CameraPosition.xyz, 1.0);
+            
         }
     `,
 	fragmentShader: `
@@ -159,13 +174,6 @@ export const SkyShader = {
 		${AtmosphereCommon}
 		${TransmittanceLookup}
 		${InscatterLookup}
-
-        #ifdef FIX_INSCATTER_SAMPLE
-            float fixU(float u) {
-                float fixNumber = mod(u, 1.0 / RES_NU);
-                return 3.0 / RES_NU + fixNumber;
-            }
-        #endif
 
         vec3 GetMie(vec4 rayMie) {	
             // approximated single Mie scattering (cf. approximate Cm in paragraph "Angular precision")

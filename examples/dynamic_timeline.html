@@ -188,8 +188,8 @@
 
 			gui.add(skyTimeline, 'timeline', 0, 24, 0.01);
 			gui.add(skyTimeline, '_sunSize', 0, 10, 0.01).onChange(refreshTimeline).name('Sun Size');
-			gui.add(skyMaterial.uniforms, '_SkyMieG', 0, 1, 0.01).onChange(refreshTimeline).name('Sun Anisotropy Factor');
-			gui.add(skyMaterial.uniforms, '_SkyMieScale', 0, 2, 0.01).onChange(refreshTimeline).name('Mie Scattering');
+			gui.add(skyMaterial.uniforms, 'miePhaseG', 0, 1, 0.01).onChange(refreshTimeline).name('Mie Phase G');
+			gui.add(skyMaterial.uniforms, 'miePhaseScale', 0, 2, 0.01).onChange(refreshTimeline).name('Mie Scattering');
 
 			const directionFolder = gui.addFolder('Direction');
 

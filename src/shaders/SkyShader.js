@@ -17,10 +17,12 @@ export const SkyShader = {
 		SKY_HDR_MODE: false
 	},
 	uniforms: {
+		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
+
 		cameraHeight: 0, // camera height to sealevel
 
-		_SkyMieG: 0.76,
-		_SkyMieScale: 1,
+		miePhaseG: 0.8,
+		miePhaseScale: 1,
 
 		_MoonDirSize: [0, -1, 0, 8],
 
@@ -50,25 +52,21 @@ export const SkyShader = {
 		_MoonInnerCorona: [0 / 255, 0 / 255, 0 / 255, 0.5],
 		_MoonOuterCorona: [65 / 255, 88 / 255, 128 / 255, 0.5],
 
-		_SkyExposure: 1.0,
-
-		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1]
+		_SkyExposure: 1.0
 	},
 	vertexShader: `
         #define PI 3.14159265359
 
         attribute vec3 a_Position;
 
-        uniform mat4 u_ProjectionView;
 		uniform mat4 u_Projection;
 		uniform mat4 u_View;
 		uniform mat4 u_Model;
-        uniform vec3 u_CameraPosition;
 
         uniform float cameraHeight;
 
-        uniform float _SkyMieG;
-        uniform float _SkyMieScale;
+        uniform float miePhaseG;
+        uniform float miePhaseScale;
 
         uniform vec4 _SunDirSize;
         uniform vec4 _MoonDirSize;
@@ -78,15 +76,21 @@ export const SkyShader = {
         uniform mat4 _SpaceRotationMatrix;
 
         varying vec4 vWorldPosAndCamY;
+
         varying vec3 vMiePhase_g;
         varying vec3 vSun_g;
+
         varying vec2 vMoonTC;
         varying vec3 vSpaceTC;
 
-        // Mie phase G function and Mie scattering scale, (compute this function in Vertex program)
+        // Mie phase G function and Mie scattering scale, (compute this function in Vertex program for optimization)
         vec3 PhaseFunctionG(float g, float scale) {
             float g2 = g * g;
-            return vec3(scale * 1.5 * (1.0 / (4.0 * PI)) * ((1.0 - g2) / (2.0 + g2)), 1.0 + g2, 2.0 * g);
+            return vec3(
+				scale * 3.0 / (8.0 * PI) * (1.0 - g2) / (2.0 + g2), 
+				1.0 + g2, 
+				2.0 * g
+			);
         }
 
 		mat4 clearMat4Translate(mat4 m) {
@@ -107,12 +111,12 @@ export const SkyShader = {
 				vWorldPosAndCamY.xyz = a_Position;
 			#endif
 
-			vWorldPosAndCamY.w = max(cameraHeight, 0.0); // no lower than sealevel
+			vWorldPosAndCamY.w = max(cameraHeight, 10.0); // no lower than sealevel
 
 			gl_Position = u_Projection * viewMatrix * modelMatrix * vec4(a_Position, 1.0);
 			gl_Position.z = gl_Position.w;
 
-            vMiePhase_g = PhaseFunctionG(_SkyMieG, _SkyMieScale);
+            vMiePhase_g = PhaseFunctionG(miePhaseG, miePhaseScale);
 
             #ifdef SKY_SUNDISK
                 float scale = 8e-3;
@@ -171,6 +175,8 @@ export const SkyShader = {
         const float Rt = 6420000.0;
         const float RL = 6421000.0;
 
+		const float SUN_BRIGHTNESS = 40.0;
+
 		${AtmosphereCommon}
 		${TransmittanceLookup}
 		${InscatterLookup}
@@ -194,45 +200,34 @@ export const SkyShader = {
 			return miePhase_g.x / pow(miePhase_g.y - miePhase_g.z * mu, 1.5);
 		}
 
-        const vec3 EARTH_POS = vec3(0.0, 6360010.0, 0.0);
-        const float SUN_BRIGHTNESS = 40.0;
-
-        vec3 SkyRadiance(vec3 camera, vec3 viewdir, float nu, vec3 MiePhase_g, out vec3 extinction) {
-            camera += EARTH_POS;
-
-            vec3 result = vec3(0., 0., 0.);
+        vec3 SkyRadiance(vec3 camera, vec3 viewdir, float nu, vec3 MiePhase_g, out vec3 transmittance) {
             float r = length(camera);
             float rMu = dot(camera, viewdir);
-            float mu = rMu / r;
 
-            float deltaSq = sqrt(rMu * rMu - r * r + Rt * Rt);
-            float din = max(-rMu - deltaSq, 0.0);
+            float din = -rMu - sqrt(rMu * rMu - r * r + Rt * Rt);
             
             if (din > 0.0) {
                 camera += din * viewdir;
                 rMu += din;
-                mu = rMu / Rt;
                 r = Rt;
-            }
-            
+            } else if (r > Rt) {
+			 	transmittance = vec3(1., 1., 1.);
+				return vec3(0., 0., 0.);
+			}
+
+			float mu = rMu / r;
+			float muS = dot(camera, _SunDirSize.xyz) / r;
             // float nu = dot(viewdir, _SunDirSize.xyz); // nu value is from function input
-            float muS = dot(camera, _SunDirSize.xyz) / r;
 
-            vec4 inScatter = GetScattering(r, rMu / r, muS, nu);
+            transmittance = GetTransmittanceToTopAtmosphereBoundary(r, mu);
 
-            extinction = GetTransmittanceToTopAtmosphereBoundary(r, mu);
+			vec4 scattering = GetScattering(r, rMu / r, muS, nu);
+			vec3 scatteringM = GetMie(scattering);
 
-            if(r <= Rt) {
-                vec3 inScatterM = GetMie(inScatter);
-                float phase = PhaseFunctionR();
-                float phaseM = PhaseFunctionM(nu, MiePhase_g);
-                result = (inScatter.rgb * phase + inScatterM * phaseM) * (1.0 + nu * nu);
-            } else {
-                result = vec3(0., 0., 0.);
-                extinction = vec3(1., 1., 1.);
-            }
+			float phaseR = PhaseFunctionR();
+			float phaseM = PhaseFunctionM(nu, MiePhase_g);
 
-            return result * SUN_BRIGHTNESS;
+            return (scattering.rgb * phaseR + scatteringM * phaseM) * (1.0 + nu * nu) * SUN_BRIGHTNESS;
         }
 
         vec3 hdr(vec3 L) {
@@ -263,7 +258,7 @@ export const SkyShader = {
             float nu = dot(dir, _SunDirSize.xyz);
 
             vec3 extinction = vec3(0.0);
-            vec3 col = SkyRadiance(vec3(0.0, vWorldPosAndCamY.w, 0.0), dir, nu, vMiePhase_g, extinction);
+            vec3 col = SkyRadiance(vec3(0.0, vWorldPosAndCamY.w + Rg, 0.0), dir, nu, vMiePhase_g, extinction);
 
             // ------------------
 

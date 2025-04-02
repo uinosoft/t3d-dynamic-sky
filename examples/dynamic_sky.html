@@ -167,10 +167,16 @@
 		});
 		altitudeFolder.add(skyMaterial.uniforms, 'cameraHeight', 0, 60000).name('Altitude').listen();
 
-		gui.add(skyMaterial.uniforms, '_SkyboxOcean', 0, 1, 0.01).name('Skybox Ocean');
+		const miePhaseFolder = gui.addFolder('Mie Phase');
+		miePhaseFolder.add(skyMaterial.uniforms, 'miePhaseG', 0, 1, 0.01).name('Mie Phase G');
+		miePhaseFolder.add(skyMaterial.uniforms, 'miePhaseScale', 0, 5, 0.01).name('SkyMieScale');
 
-		gui.add(skyMaterial.uniforms, '_SkyMieG', 0, 1, 0.01).name('SkyMieG');
-		gui.add(skyMaterial.uniforms, '_SkyMieScale', 0, 5, 0.01).name('SkyMieScale');
+		const sunFolder = gui.addFolder('Sun');
+		sunFolder.add(skyMaterial.defines, 'SKY_SUNDISK').name('Sun Disk').onChange(value => {
+			skyMaterial.needsUpdate = true;
+		});
+
+		gui.add(skyMaterial.uniforms, '_SkyboxOcean', 0, 1, 0.01).name('Skybox Ocean');
 
 		gui.add(skyMaterial.uniforms, '_SkyExposure', 0, 1, 0.01).name('Sky Exposure');
 

@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html>
-
 <head>
 	<meta charset="utf-8">
 	<title>t3d - sky</title>
 	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link rel="stylesheet" type="text/css" href="./main.css">
 </head>
-
 <body>
 	<!-- Import maps polyfill -->
 	<!-- Remove this when import maps will be widely supported -->
@@ -43,17 +42,9 @@
 		canvas.width = width;
 		canvas.height = height;
 		container.appendChild(canvas);
+
 		const forwardRenderer = new ForwardRenderer(canvas, { antialias: true, alpha: true });
 		forwardRenderer.setClearColor(0, 0, 0, 0);
-
-		const capabilities = forwardRenderer.capabilities;
-
-		const use3DInscatterTexture = true;
-		const altitudeLayers = 1;
-
-		const skyPrecomputeUtil = new SkyPrecomputeUtil(capabilities, { use3DInscatterTexture, altitudeLayers });
-		skyPrecomputeUtil.computeTransmittance(forwardRenderer);
-		skyPrecomputeUtil.computeInscatter(forwardRenderer);
 
 		const scene = new t3d.Scene();
 		scene.environmentLightIntensity = 0.8;
@@ -71,6 +62,13 @@
 		camera.setPerspective(70 / 180 * Math.PI, width / height, 0.01, 1000);
 		camera.position.set(0, 1, 5);
 		scene.add(camera);
+
+		const controller = new OrbitControls(camera, canvas);
+
+		// scene
+
+		const ambientLight = new t3d.AmbientLight(0x77aaff, 0.3);
+		scene.add(ambientLight);
 
 		const sphere_geometry = new t3d.SphereGeometry(0.5, 20, 20);
 		const sphere_material = new t3d.PBRMaterial();
@@ -91,8 +89,36 @@
 		plane.receiveShadow = true;
 		scene.add(plane);
 
-		const ambientLight = new t3d.AmbientLight(0x77aaff, 0.3);
-		scene.add(ambientLight);
+		// precompute
+
+		const precomputeOptions = {
+			transmittanceMapping: 1,
+			use3DInscatterTexture: true,
+			altitudeLayers: 4
+		};
+
+		let skyPrecomputeUtil;
+
+		function precompute() {
+			skyPrecomputeUtil && skyPrecomputeUtil.dispose();
+			skyPrecomputeUtil = new SkyPrecomputeUtil(forwardRenderer.capabilities, precomputeOptions);
+			skyPrecomputeUtil.computeTransmittance(forwardRenderer);
+			skyPrecomputeUtil.computeInscatter(forwardRenderer);
+
+			return skyPrecomputeUtil;
+		}
+
+		// sky and sun
+
+		const sky = new Sky();
+		scene.add(sky);
+
+		const skyMaterial = sky.material;
+		skyMaterial.defines.BACKGROUND = true;
+		skyMaterial.uniforms._MoonSampler = new Texture2DLoader().load('./textures/Full_Moon_glow.jpg');
+		skyMaterial.uniforms._OuterSpaceCube = cube_texture;
+		skyMaterial.uniforms._uSkyNightParams = [1, 0.1, 0.1];
+		skyMaterial.uniforms._SkyExposure = 0.6;
 
 		const directionalLight = new t3d.DirectionalLight(0xffffff, 0.5);
 		directionalLight.position.set(-10, 20, 30);
@@ -100,52 +126,11 @@
 		directionalLight.shadow.windowSize = 15;
 		scene.add(directionalLight);
 
-		const textureLoader = new Texture2DLoader();
-
-		const texture = textureLoader.load('./textures/Sample_Rectangular_2048.jpg');
-		texture.anisotropy = 16;
-		texture.wrapS = texture.wrapT = t3d.TEXTURE_WRAP.REPEAT;
-
-		const sky = new Sky();
-		sky.setPrcomputeTextures(skyPrecomputeUtil);
-		scene.add(sky);
-
-		const moonTexture = textureLoader.load('./textures/Full_Moon_glow.jpg');
-		moonTexture.anisotropy = 16;
-
-		const skyMaterial = sky.material;
-		skyMaterial.defines.BACKGROUND = true;
-		skyMaterial.uniforms._MoonSampler = moonTexture;
-		skyMaterial.uniforms._OuterSpaceCube = cube_texture;
-		skyMaterial.uniforms._uSkyNightParams = [1, 0.1, 0.1];
-		skyMaterial.uniforms._SkyExposure = 0.6;
-		
-
-		const sphereGeometry = new t3d.SphereGeometry(1);
-
-		const sunMaterial = new t3d.BasicMaterial();
-		sunMaterial.diffuse.setRGB(1, 0, 0);
-		const sun = new t3d.Mesh(sphereGeometry, sunMaterial);
-		sun.visible = false;
-		scene.add(sun);
-
-		const moonMaterial = new t3d.BasicMaterial();
-		moonMaterial.diffuse.setRGB(0, 0, 1);
-		const moon = new t3d.Mesh(sphereGeometry, moonMaterial);
-		moon.visible = false;
-		scene.add(moon);
-
-		const controller = new OrbitControls(camera, canvas);
-		controller.target.set(0, 0, -0.5);
-
 		const spherical = new t3d.Spherical(50, Math.PI / 4, Math.PI / 4);
 		const vector3 = new t3d.Vector3();
 
 		function setSunAndMoonDir() {
 			vector3.setFromSpherical(spherical);
-
-			sun.position.copy(vector3);
-			moon.position.copy(vector3).multiplyScalar(-1);
 
 			directionalLight.position.copy(vector3);
 			directionalLight.lookAt(new t3d.Vector3(), new t3d.Vector3(0, 1, 0));
@@ -157,9 +142,19 @@
 			vector3.toArray(skyMaterial.uniforms['_MoonDirSize']);
 		}
 
+		sky.setPrcomputeTextures(precompute());
 		setSunAndMoonDir();
 
+		// gui
+
 		const gui = new GUI();
+
+		const precomputeFolder = gui.addFolder('Precompute').onChange(() => {
+			sky.setPrcomputeTextures(precompute());
+		}).close();
+		precomputeFolder.add(precomputeOptions, 'transmittanceMapping', { 'Linear': 0, 'Mapping-2008': 1, 'Mapping-2017': 2 }).name('Transmittance Mapping');
+		precomputeFolder.add(precomputeOptions, 'use3DInscatterTexture').name('3D Inscatter');
+		precomputeFolder.add(precomputeOptions, 'altitudeLayers', [1, 4]).name('Altitude Layers');
 
 		const altitudeFolder = gui.addFolder('Altitude');
 		altitudeFolder.add(skyMaterial.defines, 'BACKGROUND').name('Fixed Altitude').onChange(value => {
@@ -175,33 +170,34 @@
 		sunFolder.add(skyMaterial.defines, 'SKY_SUNDISK').name('Sun Disk').onChange(value => {
 			skyMaterial.needsUpdate = true;
 		});
+		sunFolder.add(skyMaterial.uniforms._SunDirSize, 3, 0, 8, 0.1).name('Sun Disk Size');
+		sunFolder.add(spherical, 'phi', 0, Math.PI).onChange(setSunAndMoonDir).name('Longitudinal Angle');
+		sunFolder.add(spherical, 'theta', 0, Math.PI * 2).onChange(setSunAndMoonDir).name('Horizontal Angle');
 
-		gui.add(skyMaterial.uniforms, '_SkyboxOcean', 0, 1, 0.01).name('Skybox Ocean');
+		const otherFolder = gui.addFolder('Other').close();
 
-		gui.add(skyMaterial.uniforms, '_SkyExposure', 0, 1, 0.01).name('Sky Exposure');
+		otherFolder.add(skyMaterial.uniforms, '_SkyboxOcean', 0, 1, 0.01).name('Skybox Ocean');
+		otherFolder.add(skyMaterial.uniforms, '_SkyExposure', 0, 1, 0.01).name('Sky Exposure');
 
-		gui.add(skyMaterial.uniforms._SunDirSize, 3, 0, 8, 0.1).name('Sun Size');
+		otherFolder.addColor(skyMaterial.uniforms, '_MoonInnerCorona').name('Moon Inner Corona');
+		otherFolder.addColor(skyMaterial.uniforms, '_MoonOuterCorona').name('Moon Outer Corona');
 
-		gui.addColor(skyMaterial.uniforms, '_MoonInnerCorona').name('Moon Inner Corona');
-		gui.addColor(skyMaterial.uniforms, '_MoonOuterCorona').name('Moon Outer Corona');
+		otherFolder.add(skyMaterial.uniforms._MoonInnerCorona, 3, 0, 5, 0.01).name('Inner Corona Factor');
+		otherFolder.add(skyMaterial.uniforms._MoonOuterCorona, 3, 0, 5, 0.01).name('Outer Corona Factor');
 
-		gui.add(skyMaterial.uniforms._MoonInnerCorona, 3, 0, 5, 0.01).name('Inner Corona Factor');
-		gui.add(skyMaterial.uniforms._MoonOuterCorona, 3, 0, 5, 0.01).name('Outer Corona Factor');
+		otherFolder.add(skyMaterial.uniforms._MoonDirSize, 3, 0, 8, 0.1).name('Moon Size');
 
-		gui.add(skyMaterial.uniforms._MoonDirSize, 3, 0, 8, 0.1).name('Moon Size');
+		otherFolder.addColor(skyMaterial.uniforms, '_NightHorizonColor').name('Night Horizon Color');
+		otherFolder.addColor(skyMaterial.uniforms, '_NightZenithColor').name('Night Zenith Color');
 
-		gui.addColor(skyMaterial.uniforms, '_NightHorizonColor').name('Night Horizon Color');
-		gui.addColor(skyMaterial.uniforms, '_NightZenithColor').name('Night Zenith Color');
+		otherFolder.add(skyMaterial.uniforms._NightHorizonColor, 3, 0, 1, 0.001).name('Night Horizon Factor');
+		otherFolder.add(skyMaterial.uniforms._NightZenithColor, 3, 0, 1, 0.001).name('Night Zenith Factor');
 
-		gui.add(skyMaterial.uniforms._NightHorizonColor, 3, 0, 1, 0.001).name('Night Horizon Factor');
-		gui.add(skyMaterial.uniforms._NightZenithColor, 3, 0, 1, 0.001).name('Night Zenith Factor');
+		otherFolder.add(skyMaterial.uniforms._uSkyNightParams, 0, 0, 1, 0.01).name('Night Param0');
+		otherFolder.add(skyMaterial.uniforms._uSkyNightParams, 1, 0, 1, 0.01).name('Night Param1');
+		otherFolder.add(skyMaterial.uniforms._uSkyNightParams, 2, 0, 1, 0.01).name('Night Param2');
 
-		gui.add(skyMaterial.uniforms._uSkyNightParams, 0, 0, 1, 0.01).name('Night Param0');
-		gui.add(skyMaterial.uniforms._uSkyNightParams, 1, 0, 1, 0.01).name('Night Param1');
-		gui.add(skyMaterial.uniforms._uSkyNightParams, 2, 0, 1, 0.01).name('Night Param2');
-		
-		gui.add(spherical, 'phi', 0, Math.PI).onChange(setSunAndMoonDir);
-		gui.add(spherical, 'theta', 0, Math.PI * 2).onChange(setSunAndMoonDir);
+		//
 
 		function loop(count) {
 			requestAnimationFrame(loop);

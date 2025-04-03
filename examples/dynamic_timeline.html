@@ -123,7 +123,6 @@
 		const sky = new Sky();
 		sky.setPrcomputeTextures(skyPrecomputeUtil);
 		sky.material.transparent = true;
-		sky.material.defines.SKY_HDR_MODE = false;
 		scene.add(sky);
 
 		const moonTexture = textureLoader.load('./textures/Full_Moon_glow.jpg');

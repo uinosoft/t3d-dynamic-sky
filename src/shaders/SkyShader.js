@@ -12,9 +12,9 @@ export const SkyShader = {
 
 		BACKGROUND: false,
 
-		SKY_SUNDISK: true,
-		COLORSPACE_GAMMA: true,
-		SKY_HDR_MODE: false
+		NIGHT_SKY: true,
+
+		SKY_SUNDISK: true
 	},
 	uniforms: {
 		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
@@ -119,11 +119,7 @@ export const SkyShader = {
             vMiePhase_g = PhaseFunctionG(miePhaseG, miePhaseScale);
 
             #ifdef SKY_SUNDISK
-                float scale = 8e-3;
-                #ifdef COLORSPACE_GAMMA
-                    scale = 4e-3;
-                #endif
-                vSun_g = PhaseFunctionG(.99 , _SunDirSize.w * scale * _SkyExposure);
+                vSun_g = PhaseFunctionG(.99 , _SunDirSize.w * 0.004 * _SkyExposure);
             #else
                 vSun_g = vec3(0., 0., 0.);
             #endif
@@ -243,16 +239,6 @@ export const SkyShader = {
             return L;
         }
 
-        #if defined(COLORSPACE_GAMMA)
-            #define COLOR_2_LINEAR(color) color * (0.4672 * color + 0.266)
-            #define GAMMA_2_OUTPUT(color) color
-            #define HDR_OUTPUT(color) pow(color * 1.265, vec3(0.735))
-        #else
-            #define COLOR_2_LINEAR(color) color * color
-            #define GAMMA_2_OUTPUT(color) color * color
-            #define HDR_OUTPUT(color) color * 0.6129
-        #endif
-
         void main() {
             vec3 dir = normalize(vWorldPosAndCamY.xyz);
             float nu = dot(dir, _SunDirSize.xyz);
@@ -260,42 +246,35 @@ export const SkyShader = {
             vec3 extinction = vec3(0.0);
             vec3 col = SkyRadiance(vec3(0.0, vWorldPosAndCamY.w + Rg, 0.0), dir, nu, vMiePhase_g, extinction);
 
-            // ------------------
+            #ifdef NIGHT_SKY
+				vec3 nightSkyColor = vec3(0., 0., 0.);
+				float moonMask = 0.0;
+				float gr = 1.0;
 
-            // night sky
-            vec3 nightSkyColor = vec3(0., 0., 0.);
-            float moonMask = 0.0;
-            float gr = 1.0;
+				if (_SunDirSize.y < 0.25) {
+					// add horizontal night sky gradient
+					gr = clamp(extinction.z * .25 / _NightHorizonColor.w, 0., 1.);
+					gr *= 2. - gr;
 
-            if (_SunDirSize.y < 0.25) {
-                // add horizontal night sky gradient
-                gr = clamp(extinction.z * .25 / _NightHorizonColor.w, 0., 1.);
-                gr *= 2. - gr;
+					nightSkyColor = mix(_NightHorizonColor.xyz, _NightZenithColor.xyz, gr);
+					// add moon and outer space
+					vec4 moonAlbedo = texture2D(_MoonSampler, vMoonTC.xy);
+					moonMask = moonAlbedo.a * _uSkyNightParams.y;
 
-                nightSkyColor = mix(_NightHorizonColor.xyz, _NightZenithColor.xyz, gr);
-                // add moon and outer space
-                vec4 moonAlbedo = texture2D(_MoonSampler, vMoonTC.xy);
-		        moonMask = moonAlbedo.a * _uSkyNightParams.y;
+					vec4 spaceAlbedo = textureCube(_OuterSpaceCube, vSpaceTC);
+					// TODO _uSkyNightParams.x * OuterSpaceIntensity or _uSkyNightParams.z
+					nightSkyColor += (moonAlbedo.rgb * _uSkyNightParams.y + spaceAlbedo.rgb * (max(1. - moonMask, gr) * _uSkyNightParams.z)) * gr;
 
-                vec4 spaceAlbedo = textureCube(_OuterSpaceCube, vSpaceTC);
-                // TODO _uSkyNightParams.x * OuterSpaceIntensity or _uSkyNightParams.z
-                nightSkyColor += (moonAlbedo.rgb * _uSkyNightParams.y + spaceAlbedo.rgb * (max(1. - moonMask, gr) * _uSkyNightParams.z)) * gr;
+					// moon corona
+					float m = 1. - dot(dir, _MoonDirSize.xyz);
+					nightSkyColor += _MoonInnerCorona.xyz * (1.0 / (1.05 + m * _MoonInnerCorona.w));
+					nightSkyColor += _MoonOuterCorona.xyz * (1.0 / (1.05 + m * _MoonOuterCorona.w));
+				}
 
-                // moon corona
-                float m = 1. - dot(dir, _MoonDirSize.xyz);
-                nightSkyColor += _MoonInnerCorona.xyz * (1.0 / (1.05 + m * _MoonInnerCorona.w));
-		        nightSkyColor += _MoonOuterCorona.xyz * (1.0 / (1.05 + m * _MoonOuterCorona.w));
-            }
-
-            // ------------------
-
-            #ifndef SKY_HDR_MODE
-                col += nightSkyColor;
-                col = GAMMA_2_OUTPUT(hdr2(col * _SkyExposure));
-            #else
-                col += COLOR_2_LINEAR(nightSkyColor);
-                col = HDR_OUTPUT(col * _SkyExposure);
-            #endif
+				col += nightSkyColor;
+			#endif
+            
+            col = hdr2(col * _SkyExposure);
 
             #ifdef SKY_SUNDISK
                 float sun = PhaseFunctionM(nu, vSun_g) * (1.0 + nu * nu); 

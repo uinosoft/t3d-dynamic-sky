@@ -174,6 +174,11 @@
 		sunFolder.add(spherical, 'phi', 0, Math.PI).onChange(setSunAndMoonDir).name('Longitudinal Angle');
 		sunFolder.add(spherical, 'theta', 0, Math.PI * 2).onChange(setSunAndMoonDir).name('Horizontal Angle');
 
+		const nightFolder = gui.addFolder('Night Sky');
+		nightFolder.add(skyMaterial.defines, 'NIGHT_SKY').name('Enable').onChange(value => {
+			skyMaterial.needsUpdate = true;
+		});
+
 		const otherFolder = gui.addFolder('Other').close();
 
 		otherFolder.add(skyMaterial.uniforms, '_SkyboxOcean', 0, 1, 0.01).name('Skybox Ocean');

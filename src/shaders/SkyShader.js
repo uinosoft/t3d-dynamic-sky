@@ -1,6 +1,7 @@
 import { AtmosphereCommon } from './chunks/AtmosphereCommon.js';
 import { TransmittanceLookup } from './chunks/TransmittanceLookup.js';
 import { InscatterLookup } from './chunks/InscatterLookup.js';
+import { ToneMapping } from './chunks/ToneMapping.js';
 
 export const SkyShader = {
 	name: 'sky_bg',
@@ -11,18 +12,24 @@ export const SkyShader = {
 		ALTITUDE_LAYERS: 4,
 
 		BACKGROUND: false,
+		TONE_MAPPING: 5,
+		SRGB_OUTPUT: true,
 
 		NIGHT_SKY: true,
 
 		SKY_SUNDISK: true
 	},
 	uniforms: {
+		_Inscatter: null,
+		_Transmittance: null,
 		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
 
 		cameraHeight: 0, // camera height to sealevel
 
 		miePhaseG: 0.8,
 		miePhaseScale: 1,
+
+		toneMappingExposure: 10.0,
 
 		_MoonDirSize: [0, -1, 0, 8],
 
@@ -37,9 +44,6 @@ export const SkyShader = {
 
 		_SkyboxOcean: 0,
 
-		_Inscatter: null,
-		_Transmittance: null,
-
 		_NightHorizonColor: [51 / 255, 74 / 255, 102 / 255, 0.5],
 		_NightZenithColor: [72 / 255, 100 / 255, 128 / 255, 0.5],
 
@@ -50,9 +54,7 @@ export const SkyShader = {
 		_OuterSpaceCube: null,
 
 		_MoonInnerCorona: [0 / 255, 0 / 255, 0 / 255, 0.5],
-		_MoonOuterCorona: [65 / 255, 88 / 255, 128 / 255, 0.5],
-
-		_SkyExposure: 1.0
+		_MoonOuterCorona: [65 / 255, 88 / 255, 128 / 255, 0.5]
 	},
 	vertexShader: `
         #define PI 3.14159265359
@@ -70,8 +72,6 @@ export const SkyShader = {
 
         uniform vec4 _SunDirSize;
         uniform vec4 _MoonDirSize;
-
-        uniform float _SkyExposure;
 
         uniform mat4 _SpaceRotationMatrix;
 
@@ -119,7 +119,7 @@ export const SkyShader = {
             vMiePhase_g = PhaseFunctionG(miePhaseG, miePhaseScale);
 
             #ifdef SKY_SUNDISK
-                vSun_g = PhaseFunctionG(.99 , _SunDirSize.w * 0.004 * _SkyExposure);
+                vSun_g = PhaseFunctionG(.99, _SunDirSize.w * 0.004);
             #else
                 vSun_g = vec3(0., 0., 0.);
             #endif
@@ -127,9 +127,7 @@ export const SkyShader = {
             vec3 right = normalize(cross(_MoonDirSize.xyz, vec3(0., 0., 1.)));
             vec3 up = cross(_MoonDirSize.xyz, right);
             vMoonTC = vec2(dot(right, normalize(a_Position)), dot(up, normalize(a_Position))) * _MoonDirSize.w + 0.5;
-            vSpaceTC = (_SpaceRotationMatrix * vec4(a_Position, 0.0)).xyz;
-
-            
+            vSpaceTC = (_SpaceRotationMatrix * vec4(a_Position, 0.0)).xyz; 
         }
     `,
 	fragmentShader: `
@@ -159,7 +157,7 @@ export const SkyShader = {
         uniform vec4 _MoonInnerCorona;
         uniform vec4 _MoonOuterCorona;
 
-        uniform float _SkyExposure;
+        uniform float toneMappingExposure;
 
         varying vec4 vWorldPosAndCamY;
         varying vec3 vMiePhase_g;
@@ -170,8 +168,6 @@ export const SkyShader = {
         const float Rg = 6360000.0;
         const float Rt = 6420000.0;
         const float RL = 6421000.0;
-
-		const float SUN_BRIGHTNESS = 40.0;
 
 		${AtmosphereCommon}
 		${TransmittanceLookup}
@@ -196,6 +192,10 @@ export const SkyShader = {
 			return miePhase_g.x / pow(miePhase_g.y - miePhase_g.z * mu, 1.5);
 		}
 
+		bool RayIntersectsGround(float r, float mu) {
+			return mu < 0.0 && r * r * (mu * mu - 1.0) + Rg * Rg >= 0.0;
+		}
+
         vec3 SkyRadiance(vec3 camera, vec3 viewdir, float nu, vec3 MiePhase_g, out vec3 transmittance) {
             float r = length(camera);
             float rMu = dot(camera, viewdir);
@@ -215,7 +215,9 @@ export const SkyShader = {
 			float muS = dot(camera, _SunDirSize.xyz) / r;
             // float nu = dot(viewdir, _SunDirSize.xyz); // nu value is from function input
 
-            transmittance = GetTransmittanceToTopAtmosphereBoundary(r, mu);
+			bool rayIntersectsGround = RayIntersectsGround(r, mu);
+
+            transmittance = rayIntersectsGround ? vec3(0.0) : GetTransmittanceToTopAtmosphereBoundary(r, mu);
 
 			vec4 scattering = GetScattering(r, rMu / r, muS, nu);
 			vec3 scatteringM = GetMie(scattering);
@@ -223,28 +225,19 @@ export const SkyShader = {
 			float phaseR = PhaseFunctionR();
 			float phaseM = PhaseFunctionM(nu, MiePhase_g);
 
-            return (scattering.rgb * phaseR + scatteringM * phaseM) * (1.0 + nu * nu) * SUN_BRIGHTNESS;
+            return (scattering.rgb * phaseR + scatteringM * phaseM) * (1.0 + nu * nu);
         }
 
-        vec3 hdr(vec3 L) {
-            L.r = mix(1.0 - exp(-L.r), pow(L.r * 0.38317, 1.0 / 2.2), step(L.r, 1.413));
-            L.g = mix(1.0 - exp(-L.g), pow(L.g * 0.38317, 1.0 / 2.2), step(L.g, 1.413));
-            L.b = mix(1.0 - exp(-L.b), pow(L.b * 0.38317, 1.0 / 2.2), step(L.b, 1.413));
-            return L;
-        }
+		${ToneMapping}
 
-        // switch different tonemapping methods between day and night
-        vec3 hdr2(vec3 L) {
-            L = mix(hdr(L), 1.0 - exp(-L), _uSkyNightParams.x);
-            return L;
-        }
+		#include <dithering_pars_frag>
 
         void main() {
             vec3 dir = normalize(vWorldPosAndCamY.xyz);
             float nu = dot(dir, _SunDirSize.xyz);
 
-            vec3 extinction = vec3(0.0);
-            vec3 col = SkyRadiance(vec3(0.0, vWorldPosAndCamY.w + Rg, 0.0), dir, nu, vMiePhase_g, extinction);
+            vec3 transmittance = vec3(0.0);
+            vec3 col = SkyRadiance(vec3(0.0, vWorldPosAndCamY.w + Rg, 0.0), dir, nu, vMiePhase_g, transmittance);
 
             #ifdef NIGHT_SKY
 				vec3 nightSkyColor = vec3(0., 0., 0.);
@@ -253,7 +246,7 @@ export const SkyShader = {
 
 				if (_SunDirSize.y < 0.25) {
 					// add horizontal night sky gradient
-					gr = clamp(extinction.z * .25 / _NightHorizonColor.w, 0., 1.);
+					gr = clamp(transmittance.z * .25 / _NightHorizonColor.w, 0., 1.);
 					gr *= 2. - gr;
 
 					nightSkyColor = mix(_NightHorizonColor.xyz, _NightZenithColor.xyz, gr);
@@ -271,24 +264,23 @@ export const SkyShader = {
 					nightSkyColor += _MoonOuterCorona.xyz * (1.0 / (1.05 + m * _MoonOuterCorona.w));
 				}
 
-				col += nightSkyColor;
+				col += nightSkyColor / 40.;
 			#endif
-            
-            col = hdr2(col * _SkyExposure);
 
+			col = ToneMapping(col);
+			
             #ifdef SKY_SUNDISK
                 float sun = PhaseFunctionM(nu, vSun_g) * (1.0 + nu * nu); 
-		        col += sun * extinction;
-
-                // TODO new sun disk?
-                // float sun = step(0.9999 - _SunDirSize.w * 1e-4, nu) * sign(_LightColor0.w);
-				// col += (sun * SUN_BRIGHTNESS) * extinction ;
+		        col += sun * transmittance;
             #endif
 
-            // float alpha = mix(1.0, max(1e-3, moonMask + (1. - gr)), _uSkyNightParams.x);
-            // gl_FragColor = vec4(col, alpha);
-
             gl_FragColor = vec4(col, 1.);
+
+			#ifdef SRGB_OUTPUT
+				gl_FragColor = LinearTosRGB(gl_FragColor);
+			#endif
+
+			#include <dithering_frag>
         }
     `
 };

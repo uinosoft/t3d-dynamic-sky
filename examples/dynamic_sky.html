@@ -118,7 +118,6 @@
 		skyMaterial.uniforms._MoonSampler = new Texture2DLoader().load('./textures/Full_Moon_glow.jpg');
 		skyMaterial.uniforms._OuterSpaceCube = cube_texture;
 		skyMaterial.uniforms._uSkyNightParams = [1, 0.1, 0.1];
-		skyMaterial.uniforms._SkyExposure = 0.6;
 
 		const directionalLight = new t3d.DirectionalLight(0xffffff, 0.5);
 		directionalLight.position.set(-10, 20, 30);
@@ -179,10 +178,30 @@
 			skyMaterial.needsUpdate = true;
 		});
 
+		const toneMappingFolder = gui.addFolder('Tone Mapping');
+		toneMappingFolder.add(skyMaterial.defines, 'TONE_MAPPING', {
+			'Linear': 0,
+			'Reinhard': 1,
+			'Optimized Cineon': 2,
+			'ACES Filmic': 3,
+			'Neutral': 4,
+			'AgX': 5,
+			'Unity (Legacy)': 6
+		}).name('Tone Mapping').onChange(value => {
+			skyMaterial.needsUpdate = true;
+		});
+		toneMappingFolder.add(skyMaterial.uniforms, 'toneMappingExposure', 1, 100, 1).name('Exposure');
+		toneMappingFolder.add(skyMaterial.defines, 'SRGB_OUTPUT').name('sRGB Output').onChange(value => {
+			skyMaterial.needsUpdate = true;
+		});
+
 		const otherFolder = gui.addFolder('Other').close();
 
+		otherFolder.add(skyMaterial, 'dithering').name('Dithering').onChange(value => {
+			skyMaterial.needsUpdate = true;
+		});
+
 		otherFolder.add(skyMaterial.uniforms, '_SkyboxOcean', 0, 1, 0.01).name('Skybox Ocean');
-		otherFolder.add(skyMaterial.uniforms, '_SkyExposure', 0, 1, 0.01).name('Sky Exposure');
 
 		otherFolder.addColor(skyMaterial.uniforms, '_MoonInnerCorona').name('Moon Inner Corona');
 		otherFolder.addColor(skyMaterial.uniforms, '_MoonOuterCorona').name('Moon Outer Corona');

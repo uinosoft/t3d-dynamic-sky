@@ -2968,6 +2968,178 @@ vec4 GetScattering(float r, float mu, float muS, float nu) {
 }
 `;
 
+// 0 - Linear
+// 1 - Reinhard
+// 2 - Optimized Cineon
+// 3 - ACES Filmic
+// 4 - Neutral
+// 5 - AgX
+// 6 - Unity (Legacy)
+const ToneMapping = `
+#if TONE_MAPPING == 0
+	// exposure only
+	vec3 ToneMapping(vec3 color) {
+		return saturate(toneMappingExposure * color);
+	}
+#elif TONE_MAPPING == 1
+	// source: https://www.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
+	vec3 ToneMapping(vec3 color) {
+		color *= toneMappingExposure;
+		return saturate(color / (vec3(1.0) + color));
+	}
+#elif TONE_MAPPING == 2
+	// source: http://filmicworlds.com/blog/filmic-tonemapping-operators/
+	vec3 ToneMapping(vec3 color) {
+		// optimized filmic operator by Jim Hejl and Richard Burgess-Dawson
+		color *= toneMappingExposure;
+		color = max(vec3(0.0), color - 0.004);
+		return pow((color * (6.2 * color + 0.5)) / (color * (6.2 * color + 1.7) + 0.06), vec3(2.2));
+	}
+#elif TONE_MAPPING == 3
+	// source: https://github.com/selfshadow/ltc_code/blob/master/webgl/shaders/ltc/ltc_blit.fs
+	vec3 RRTAndODTFit(vec3 v) {
+		vec3 a = v * (v + 0.0245786) - 0.000090537;
+		vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
+		return a / b;
+	}
+
+	// this implementation of ACES is modified to accommodate a brighter viewing environment.
+	// the scale factor of 1/0.6 is subjective. see discussion in https://github.com/mrdoob/three.js/pull/19621.
+	vec3 ToneMapping(vec3 color) {
+		// sRGB => XYZ => D65_2_D60 => AP1 => RRT_SAT
+		const mat3 ACESInputMat = mat3(
+			vec3(0.59719, 0.07600, 0.02840), // transposed from source
+			vec3(0.35458, 0.90834, 0.13383),
+			vec3(0.04823, 0.01566, 0.83777)
+		);
+		// ODT_SAT => XYZ => D60_2_D65 => sRGB
+		const mat3 ACESOutputMat = mat3(
+			vec3( 1.60475, -0.10208, -0.00327), // transposed from source
+			vec3(-0.53108,  1.10813, -0.07276),
+			vec3(-0.07367, -0.00605,  1.07602)
+		);
+		color *= toneMappingExposure / 0.6;
+		color = ACESInputMat * color;
+		// Apply RRT and ODT
+		color = RRTAndODTFit(color);
+		color = ACESOutputMat * color;
+		// Clamp to [0, 1]
+		return saturate(color);
+	}
+#elif TONE_MAPPING == 4
+	vec3 ToneMapping(vec3 color) {
+		const float StartCompression = 0.8 - 0.04;
+		const float Desaturation = 0.15;
+		color *= toneMappingExposure;
+		float x = min(color.r, min(color.g, color.b));
+		float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+		color -= offset;
+		float peak = max(color.r, max(color.g, color.b));
+		if (peak < StartCompression) return color;
+		float d = 1. - StartCompression;
+		float newPeak = 1. - d * d / (peak + d - StartCompression);
+		color *= newPeak / peak;
+		float g = 1. - 1. / (Desaturation * (peak - newPeak) + 1.);
+		return mix(color, vec3(newPeak), g);
+	}
+#elif TONE_MAPPING == 5
+	// Matrices for rec 2020 <> rec 709 color space conversion
+	// matrix provided in row-major order so it has been transposed
+	// https://www.itu.int/pub/R-REP-BT.2407-2017
+	const mat3 LINEAR_REC2020_TO_LINEAR_SRGB = mat3(
+		vec3(1.6605, -0.1246, -0.0182),
+		vec3(-0.5876, 1.1329, -0.1006),
+		vec3(-0.0728, -0.0083, 1.1187)
+	);
+
+	const mat3 LINEAR_SRGB_TO_LINEAR_REC2020 = mat3(
+		vec3(0.6274, 0.0691, 0.0164),
+		vec3(0.3293, 0.9195, 0.0880),
+		vec3(0.0433, 0.0113, 0.8956)
+	);
+
+	// https://iolite-engine.com/blog_posts/minimal_agx_implementation
+	// Mean error^2: 3.6705141e-06
+	vec3 agxDefaultContrastApprox(vec3 x) {
+		vec3 x2 = x * x;
+		vec3 x4 = x2 * x2;
+
+		return + 15.5 * x4 * x2
+			- 40.14 * x4 * x
+			+ 31.96 * x4
+			- 6.868 * x2 * x
+			+ 0.4298 * x2
+			+ 0.1191 * x
+			- 0.00232;
+	}
+
+	// AgX Tone Mapping implementation based on Filament, which in turn is based
+	// on Blender's implementation using rec 2020 primaries
+	// https://github.com/google/filament/pull/7236
+	// Inputs and outputs are encoded as Linear-sRGB.
+	vec3 ToneMapping(vec3 color) {
+		// AgX constants
+		const mat3 AgXInsetMatrix = mat3(
+			vec3(0.856627153315983, 0.137318972929847, 0.11189821299995),
+			vec3(0.0951212405381588, 0.761241990602591, 0.0767994186031903),
+			vec3(0.0482516061458583, 0.101439036467562, 0.811302368396859)
+		);
+
+		// explicit AgXOutsetMatrix generated from Filaments AgXOutsetMatrixInv
+		const mat3 AgXOutsetMatrix = mat3(
+			vec3(1.1271005818144368, -0.1413297634984383, -0.14132976349843826),
+			vec3(-0.11060664309660323, 1.157823702216272, -0.11060664309660294),
+			vec3(-0.016493938717834573, -0.016493938717834257, 1.2519364065950405)
+		);
+
+		// LOG2_MIN      = -10.0
+		// LOG2_MAX      =  +6.5
+		// MIDDLE_GRAY   =  0.18
+		const float AgxMinEv = -12.47393;  // log2(pow(2, LOG2_MIN) * MIDDLE_GRAY)
+		const float AgxMaxEv = 4.026069;   // log2(pow(2, LOG2_MAX) * MIDDLE_GRAY)
+
+		color *= toneMappingExposure;
+
+		color = LINEAR_SRGB_TO_LINEAR_REC2020 * color;
+
+		color = AgXInsetMatrix * color;
+
+		// Log2 encoding
+		color = max(color, 1e-10); // avoid 0 or negative numbers for log2
+		color = log2(color);
+		color = (color - AgxMinEv) / (AgxMaxEv - AgxMinEv);
+
+		color = clamp(color, 0.0, 1.0);
+
+		// Apply sigmoid
+		color = agxDefaultContrastApprox(color);
+
+		// Apply AgX look
+		// v = agxLook(v, look);
+
+		color = AgXOutsetMatrix * color;
+
+		// Linearize
+		color = pow(max(vec3(0.0), color), vec3(2.2));
+
+		color = LINEAR_REC2020_TO_LINEAR_SRGB * color;
+
+		// Gamut mapping. Simple clamp for now.
+		color = clamp(color, 0.0, 1.0);
+
+		return color;
+	}
+#elif TONE_MAPPING == 6
+	vec3 ToneMapping(vec3 color) {
+		color *= toneMappingExposure;
+		color.r = mix(1.0 - exp(-color.r), pow(color.r * 0.38317, 1.0 / 2.2), step(color.r, 1.413));
+		color.g = mix(1.0 - exp(-color.g), pow(color.g * 0.38317, 1.0 / 2.2), step(color.g, 1.413));
+		color.b = mix(1.0 - exp(-color.b), pow(color.b * 0.38317, 1.0 / 2.2), step(color.b, 1.413));
+		return color;
+	}
+#endif
+`;
+
 const SkyShader = {
 	name: 'sky_bg',
 	defines: {
@@ -2977,18 +3149,24 @@ const SkyShader = {
 		ALTITUDE_LAYERS: 4,
 
 		BACKGROUND: false,
+		TONE_MAPPING: 5,
+		SRGB_OUTPUT: true,
 
 		NIGHT_SKY: true,
 
 		SKY_SUNDISK: true
 	},
 	uniforms: {
+		_Inscatter: null,
+		_Transmittance: null,
 		betaR: [5.8e-3, 1.35e-2, 3.31e-2, 1],
 
 		cameraHeight: 0, // camera height to sealevel
 
 		miePhaseG: 0.8,
 		miePhaseScale: 1,
+
+		toneMappingExposure: 10.0,
 
 		_MoonDirSize: [0, -1, 0, 8],
 
@@ -3003,9 +3181,6 @@ const SkyShader = {
 
 		_SkyboxOcean: 0,
 
-		_Inscatter: null,
-		_Transmittance: null,
-
 		_NightHorizonColor: [51 / 255, 74 / 255, 102 / 255, 0.5],
 		_NightZenithColor: [72 / 255, 100 / 255, 128 / 255, 0.5],
 
@@ -3016,9 +3191,7 @@ const SkyShader = {
 		_OuterSpaceCube: null,
 
 		_MoonInnerCorona: [0 / 255, 0 / 255, 0 / 255, 0.5],
-		_MoonOuterCorona: [65 / 255, 88 / 255, 128 / 255, 0.5],
-
-		_SkyExposure: 1.0
+		_MoonOuterCorona: [65 / 255, 88 / 255, 128 / 255, 0.5]
 	},
 	vertexShader: `
         #define PI 3.14159265359
@@ -3036,8 +3209,6 @@ const SkyShader = {
 
         uniform vec4 _SunDirSize;
         uniform vec4 _MoonDirSize;
-
-        uniform float _SkyExposure;
 
         uniform mat4 _SpaceRotationMatrix;
 
@@ -3085,7 +3256,7 @@ const SkyShader = {
             vMiePhase_g = PhaseFunctionG(miePhaseG, miePhaseScale);
 
             #ifdef SKY_SUNDISK
-                vSun_g = PhaseFunctionG(.99 , _SunDirSize.w * 0.004 * _SkyExposure);
+                vSun_g = PhaseFunctionG(.99, _SunDirSize.w * 0.004);
             #else
                 vSun_g = vec3(0., 0., 0.);
             #endif
@@ -3093,9 +3264,7 @@ const SkyShader = {
             vec3 right = normalize(cross(_MoonDirSize.xyz, vec3(0., 0., 1.)));
             vec3 up = cross(_MoonDirSize.xyz, right);
             vMoonTC = vec2(dot(right, normalize(a_Position)), dot(up, normalize(a_Position))) * _MoonDirSize.w + 0.5;
-            vSpaceTC = (_SpaceRotationMatrix * vec4(a_Position, 0.0)).xyz;
-
-            
+            vSpaceTC = (_SpaceRotationMatrix * vec4(a_Position, 0.0)).xyz; 
         }
     `,
 	fragmentShader: `
@@ -3125,7 +3294,7 @@ const SkyShader = {
         uniform vec4 _MoonInnerCorona;
         uniform vec4 _MoonOuterCorona;
 
-        uniform float _SkyExposure;
+        uniform float toneMappingExposure;
 
         varying vec4 vWorldPosAndCamY;
         varying vec3 vMiePhase_g;
@@ -3136,8 +3305,6 @@ const SkyShader = {
         const float Rg = 6360000.0;
         const float Rt = 6420000.0;
         const float RL = 6421000.0;
-
-		const float SUN_BRIGHTNESS = 40.0;
 
 		${AtmosphereCommon}
 		${TransmittanceLookup}
@@ -3162,6 +3329,10 @@ const SkyShader = {
 			return miePhase_g.x / pow(miePhase_g.y - miePhase_g.z * mu, 1.5);
 		}
 
+		bool RayIntersectsGround(float r, float mu) {
+			return mu < 0.0 && r * r * (mu * mu - 1.0) + Rg * Rg >= 0.0;
+		}
+
         vec3 SkyRadiance(vec3 camera, vec3 viewdir, float nu, vec3 MiePhase_g, out vec3 transmittance) {
             float r = length(camera);
             float rMu = dot(camera, viewdir);
@@ -3181,7 +3352,9 @@ const SkyShader = {
 			float muS = dot(camera, _SunDirSize.xyz) / r;
             // float nu = dot(viewdir, _SunDirSize.xyz); // nu value is from function input
 
-            transmittance = GetTransmittanceToTopAtmosphereBoundary(r, mu);
+			bool rayIntersectsGround = RayIntersectsGround(r, mu);
+
+            transmittance = rayIntersectsGround ? vec3(0.0) : GetTransmittanceToTopAtmosphereBoundary(r, mu);
 
 			vec4 scattering = GetScattering(r, rMu / r, muS, nu);
 			vec3 scatteringM = GetMie(scattering);
@@ -3189,28 +3362,19 @@ const SkyShader = {
 			float phaseR = PhaseFunctionR();
 			float phaseM = PhaseFunctionM(nu, MiePhase_g);
 
-            return (scattering.rgb * phaseR + scatteringM * phaseM) * (1.0 + nu * nu) * SUN_BRIGHTNESS;
+            return (scattering.rgb * phaseR + scatteringM * phaseM) * (1.0 + nu * nu);
         }
 
-        vec3 hdr(vec3 L) {
-            L.r = mix(1.0 - exp(-L.r), pow(L.r * 0.38317, 1.0 / 2.2), step(L.r, 1.413));
-            L.g = mix(1.0 - exp(-L.g), pow(L.g * 0.38317, 1.0 / 2.2), step(L.g, 1.413));
-            L.b = mix(1.0 - exp(-L.b), pow(L.b * 0.38317, 1.0 / 2.2), step(L.b, 1.413));
-            return L;
-        }
+		${ToneMapping}
 
-        // switch different tonemapping methods between day and night
-        vec3 hdr2(vec3 L) {
-            L = mix(hdr(L), 1.0 - exp(-L), _uSkyNightParams.x);
-            return L;
-        }
+		#include <dithering_pars_frag>
 
         void main() {
             vec3 dir = normalize(vWorldPosAndCamY.xyz);
             float nu = dot(dir, _SunDirSize.xyz);
 
-            vec3 extinction = vec3(0.0);
-            vec3 col = SkyRadiance(vec3(0.0, vWorldPosAndCamY.w + Rg, 0.0), dir, nu, vMiePhase_g, extinction);
+            vec3 transmittance = vec3(0.0);
+            vec3 col = SkyRadiance(vec3(0.0, vWorldPosAndCamY.w + Rg, 0.0), dir, nu, vMiePhase_g, transmittance);
 
             #ifdef NIGHT_SKY
 				vec3 nightSkyColor = vec3(0., 0., 0.);
@@ -3219,7 +3383,7 @@ const SkyShader = {
 
 				if (_SunDirSize.y < 0.25) {
 					// add horizontal night sky gradient
-					gr = clamp(extinction.z * .25 / _NightHorizonColor.w, 0., 1.);
+					gr = clamp(transmittance.z * .25 / _NightHorizonColor.w, 0., 1.);
 					gr *= 2. - gr;
 
 					nightSkyColor = mix(_NightHorizonColor.xyz, _NightZenithColor.xyz, gr);
@@ -3237,24 +3401,23 @@ const SkyShader = {
 					nightSkyColor += _MoonOuterCorona.xyz * (1.0 / (1.05 + m * _MoonOuterCorona.w));
 				}
 
-				col += nightSkyColor;
+				col += nightSkyColor / 40.;
 			#endif
-            
-            col = hdr2(col * _SkyExposure);
 
+			col = ToneMapping(col);
+			
             #ifdef SKY_SUNDISK
                 float sun = PhaseFunctionM(nu, vSun_g) * (1.0 + nu * nu); 
-		        col += sun * extinction;
-
-                // TODO new sun disk?
-                // float sun = step(0.9999 - _SunDirSize.w * 1e-4, nu) * sign(_LightColor0.w);
-				// col += (sun * SUN_BRIGHTNESS) * extinction ;
+		        col += sun * transmittance;
             #endif
 
-            // float alpha = mix(1.0, max(1e-3, moonMask + (1. - gr)), _uSkyNightParams.x);
-            // gl_FragColor = vec4(col, alpha);
-
             gl_FragColor = vec4(col, 1.);
+
+			#ifdef SRGB_OUTPUT
+				gl_FragColor = LinearTosRGB(gl_FragColor);
+			#endif
+
+			#include <dithering_frag>
         }
     `
 };
@@ -3265,6 +3428,7 @@ class Sky extends Mesh {
 		const material = new ShaderMaterial(SkyShader);
 		material.depthWrite = false;
 		material.side = DRAW_SIDE.BACK;
+		material.dithering = true;
 
 		super(new SphereGeometry(1, 100, 100), material);
 

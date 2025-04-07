@@ -7,6 +7,7 @@ export class Sky extends Mesh {
 		const material = new ShaderMaterial(SkyShader);
 		material.depthWrite = false;
 		material.side = DRAW_SIDE.BACK;
+		material.dithering = true;
 
 		super(new SphereGeometry(1, 100, 100), material);
 

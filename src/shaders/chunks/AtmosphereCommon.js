@@ -25,4 +25,12 @@ float Limit(float r, float mu) {
     
     return dout; 
 }
+
+float GetTextureCoordFromUnitRange(float x, float textureSize) {
+	return 0.5 / textureSize + x * (1.0 - 1.0 / textureSize);
+}
+
+float GetUnitRangeFromTextureCoord(float u, float textureSize) {
+	return (u - 0.5 / textureSize) / (1.0 - 1.0 / textureSize);
+}
 `;

@@ -1,8 +1,4 @@
 export const InscatterLookup = `
-float GetTextureCoordFromUnitRange(float x, float textureSize) {
-	return 0.5 / textureSize + x * (1.0 - 1.0 / textureSize);
-}
-
 vec4 GetScattering(float r, float mu, float muS, float nu) {
 	#ifdef INSCATTER_3D
 		float resR = RES_R_TOTAL;

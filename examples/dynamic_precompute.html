@@ -84,7 +84,7 @@
 			if (skyPrecomputeUtil.use3DInscatterTexture) {
 				inscatterHelper.scale.set(2, 0.5, 1);
 			} else {
-				inscatterHelper.scale.set(2, 1, 2);
+				inscatterHelper.scale.set(2, 0.5, skyPrecomputeUtil.altitudeLayers);
 			}
 			scene.add(inscatterHelper);
 		}

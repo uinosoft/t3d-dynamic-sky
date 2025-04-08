@@ -1,23 +1,16 @@
 export const InscatterCompute = `
-float GetUnitRangeFromTextureCoord(float u, float textureSize) {
-	return (u - 0.5 / textureSize) / (1.0 - 1.0 / textureSize);
-}
-
-void GetRMuMuSNuFromScatteringUvw(vec3 uvw, out float r, out float mu, out float muS, out float nu) { 
-	float x = uvw.x * RES_MU_S * RES_NU - 0.5;
-
-	float xNu = floor(x / RES_MU_S) / (RES_NU - 1.0);
-	float xMuS = mod(x, RES_MU_S) / (RES_MU_S - 1.0);
+void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out float muS, out float nu) {
+	float xMuS = GetUnitRangeFromTextureCoord(uvwz.y, RES_MU_S);
 
 	float H = sqrt(Rt * Rt - Rg * Rg);
-	float rho = H * GetUnitRangeFromTextureCoord(uvw.z, RES_R_TOTAL);
+	float rho = H * GetUnitRangeFromTextureCoord(uvwz.w, RES_R_TOTAL);
 	r = sqrt(rho * rho + Rg * Rg);
 
 	#if INSCATTER_MAPPING == 1
-		if (uvw.y < 0.5) { // bottom half
+		if (uvwz.z < 0.5) { // bottom half
 			float dmin = r - Rg;
 			float dmax = rho;
-			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvw.y, RES_MU / 2.0);
+			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvwz.z, RES_MU / 2.0);
 			mu = -(rho * rho + d * d) / (2.0 * r * d);
 			// clamp
 			// mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
@@ -25,7 +18,7 @@ void GetRMuMuSNuFromScatteringUvw(vec3 uvw, out float r, out float mu, out float
 		} else {
 			float dmin = Rt - r;
 			float dmax = rho + H;
-			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvw.y - 1., RES_MU / 2.0);
+			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvwz.z - 1., RES_MU / 2.0);
 			mu = (H * H - rho * rho - d * d) / (2.0 * r * d);
 			mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0); 
 		}
@@ -34,11 +27,11 @@ void GetRMuMuSNuFromScatteringUvw(vec3 uvw, out float r, out float mu, out float
 		// better formula 
 		muS = tan((2.0 * xMuS - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75);
 	#else 
-		mu = -1.0 + 2.0 * GetUnitRangeFromTextureCoord(uvw.y, RES_MU);
+		mu = -1.0 + 2.0 * GetUnitRangeFromTextureCoord(uvwz.z, RES_MU);
 		muS = -0.2 + xMuS * 1.2;
 	#endif
 
-	nu = -1.0 + xNu * 2.0;
+	nu = uvwz.x * 2.0 - 1.0;
 }
 
 void ComputeSingleScatteringIntegrand(float r, float mu, float muS, float nu, float d, out vec3 rayleigh, out float mie) { 

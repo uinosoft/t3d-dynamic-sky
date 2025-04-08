@@ -397,6 +397,14 @@ float Limit(float r, float mu) {
 		
 		return dout; 
 }
+
+float GetTextureCoordFromUnitRange(float x, float textureSize) {
+	return 0.5 / textureSize + x * (1.0 - 1.0 / textureSize);
+}
+
+float GetUnitRangeFromTextureCoord(float u, float textureSize) {
+	return (u - 0.5 / textureSize) / (1.0 - 1.0 / textureSize);
+}
 `;
 
 	// ref https://ebruneton.github.io/precomputed_atmospheric_scattering
@@ -448,10 +456,6 @@ vec3 GetTransmittance(float r, float mu, float d) {
 `;
 
 	const InscatterLookup = `
-float GetTextureCoordFromUnitRange(float x, float textureSize) {
-	return 0.5 / textureSize + x * (1.0 - 1.0 / textureSize);
-}
-
 vec4 GetScattering(float r, float mu, float muS, float nu) {
 	#ifdef INSCATTER_3D
 		float resR = RES_R_TOTAL;
@@ -1140,25 +1144,18 @@ vec3 ComputeTransmittance(vec2 uv) {
 	};
 
 	const InscatterCompute = `
-float GetUnitRangeFromTextureCoord(float u, float textureSize) {
-	return (u - 0.5 / textureSize) / (1.0 - 1.0 / textureSize);
-}
-
-void GetRMuMuSNuFromScatteringUvw(vec3 uvw, out float r, out float mu, out float muS, out float nu) { 
-	float x = uvw.x * RES_MU_S * RES_NU - 0.5;
-
-	float xNu = floor(x / RES_MU_S) / (RES_NU - 1.0);
-	float xMuS = mod(x, RES_MU_S) / (RES_MU_S - 1.0);
+void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out float muS, out float nu) {
+	float xMuS = GetUnitRangeFromTextureCoord(uvwz.y, RES_MU_S);
 
 	float H = sqrt(Rt * Rt - Rg * Rg);
-	float rho = H * GetUnitRangeFromTextureCoord(uvw.z, RES_R_TOTAL);
+	float rho = H * GetUnitRangeFromTextureCoord(uvwz.w, RES_R_TOTAL);
 	r = sqrt(rho * rho + Rg * Rg);
 
 	#if INSCATTER_MAPPING == 1
-		if (uvw.y < 0.5) { // bottom half
+		if (uvwz.z < 0.5) { // bottom half
 			float dmin = r - Rg;
 			float dmax = rho;
-			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvw.y, RES_MU / 2.0);
+			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvwz.z, RES_MU / 2.0);
 			mu = -(rho * rho + d * d) / (2.0 * r * d);
 			// clamp
 			// mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
@@ -1166,7 +1163,7 @@ void GetRMuMuSNuFromScatteringUvw(vec3 uvw, out float r, out float mu, out float
 		} else {
 			float dmin = Rt - r;
 			float dmax = rho + H;
-			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvw.y - 1., RES_MU / 2.0);
+			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvwz.z - 1., RES_MU / 2.0);
 			mu = (H * H - rho * rho - d * d) / (2.0 * r * d);
 			mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0); 
 		}
@@ -1175,11 +1172,11 @@ void GetRMuMuSNuFromScatteringUvw(vec3 uvw, out float r, out float mu, out float
 		// better formula 
 		muS = tan((2.0 * xMuS - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75);
 	#else 
-		mu = -1.0 + 2.0 * GetUnitRangeFromTextureCoord(uvw.y, RES_MU);
+		mu = -1.0 + 2.0 * GetUnitRangeFromTextureCoord(uvwz.z, RES_MU);
 		muS = -0.2 + xMuS * 1.2;
 	#endif
 
-	nu = -1.0 + xNu * 2.0;
+	nu = uvwz.x * 2.0 - 1.0;
 }
 
 void ComputeSingleScatteringIntegrand(float r, float mu, float muS, float nu, float d, out vec3 rayleigh, out float mie) { 
@@ -1266,30 +1263,35 @@ void ComputeSingleScattering(float r, float mu, float muS, float nu, out vec3 ra
 				void main() {
 			vec2 uv = v_Uv;
 
-			#ifndef INSCATTER_3D
-				float layer;
-				float resR = float(ALTITUDE_LAYERS);
-				if (resR > 1.) {
-					float layerIndex = floor(uv.y * resR);
-					layerIndex = clamp(layerIndex, 0., resR - 1.);
-					layer = pow(2., layerIndex);
+			const vec4 SCATTERING_TEXTURE_SIZE = vec4(
+				RES_NU - 1.,
+				RES_MU_S,
+				RES_MU,
+				RES_R_TOTAL
+			);
 
-					uv.y = uv.y * resR - layerIndex;
-					uv.y = clamp(uv.y, 0., 1.);
+			float fragCoordNu = floor(gl_FragCoord.x / RES_MU_S);
+			float fragCoordMuS = mod(gl_FragCoord.x, RES_MU_S);
 
-					if (layerIndex < 0.5) {
-						layer = 0.0;
-					}
-				} else {
-					layer = 1.;
-				}
+			#ifdef INSCATTER_3D
+				float fragCoordY = gl_FragCoord.y;
+			#else
+				#if ALTITUDE_LAYERS > 1
+					float layerIndex = floor(gl_FragCoord.y / RES_MU);
+					float layer = pow(2., layerIndex) - 1.0;
+					float fragCoordY = mod(gl_FragCoord.y, RES_MU);
+				#else
+					float layer = 1.0;
+					float fragCoordY = gl_FragCoord.y;
+				#endif
 			#endif
 
-			float z = layer / max((RES_R_TOTAL - 1.0), 1.0);
-			vec3 uvw = vec3(uv, z);
+			float fragCoordZ = GetTextureCoordFromUnitRange(layer, RES_R_TOTAL);
+
+			vec4 uvwz = vec4(fragCoordNu, fragCoordMuS, fragCoordY, fragCoordZ) / SCATTERING_TEXTURE_SIZE;
 			
 						float r, mu, muS, nu;
-						GetRMuMuSNuFromScatteringUvw(uvw, r, mu, muS, nu);
+						GetRMuMuSNuFromScatteringUvwz(uvwz, r, mu, muS, nu);
 
 			vec3 ray;
 						float mie; // only calc the red channel
@@ -1353,7 +1355,7 @@ void ComputeSingleScattering(float r, float mu, float muS, float nu, out vec3 ra
 			transmittanceRT.texture.type = type;
 			transmittanceRT.texture.format = t3d.PIXEL_FORMAT.RGBA;
 			transmittanceRT.texture.generateMipmaps = false;
-			const inscatterRT = use3DInscatterTexture ? new t3d.RenderTarget3D(256, 128, 32) : new t3d.RenderTarget2D(512, 512);
+			const inscatterRT = use3DInscatterTexture ? new t3d.RenderTarget3D(256, 128, 32) : new t3d.RenderTarget2D(256, 128 * altitudeLayers);
 			inscatterRT.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
 			inscatterRT.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
 			inscatterRT.texture.type = type;

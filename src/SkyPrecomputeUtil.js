@@ -58,7 +58,7 @@ export class SkyPrecomputeUtil {
 		transmittanceRT.texture.format = PIXEL_FORMAT.RGBA;
 		transmittanceRT.texture.generateMipmaps = false;
 
-		const inscatterRT = use3DInscatterTexture ? new RenderTarget3D(256, 128, 32) : new RenderTarget2D(512, 512);
+		const inscatterRT = use3DInscatterTexture ? new RenderTarget3D(256, 128, 32) : new RenderTarget2D(256, 128 * altitudeLayers);
 		inscatterRT.texture.minFilter = TEXTURE_FILTER.LINEAR;
 		inscatterRT.texture.magFilter = TEXTURE_FILTER.LINEAR;
 		inscatterRT.texture.type = type;

@@ -43,30 +43,35 @@ export const InscatterShader = {
         void main() {
 			vec2 uv = v_Uv;
 
-			#ifndef INSCATTER_3D
-				float layer;
-				float resR = float(ALTITUDE_LAYERS);
-				if (resR > 1.) {
-					float layerIndex = floor(uv.y * resR);
-					layerIndex = clamp(layerIndex, 0., resR - 1.);
-					layer = pow(2., layerIndex);
+			const vec4 SCATTERING_TEXTURE_SIZE = vec4(
+				RES_NU - 1.,
+				RES_MU_S,
+				RES_MU,
+				RES_R_TOTAL
+			);
 
-					uv.y = uv.y * resR - layerIndex;
-					uv.y = clamp(uv.y, 0., 1.);
+			float fragCoordNu = floor(gl_FragCoord.x / RES_MU_S);
+			float fragCoordMuS = mod(gl_FragCoord.x, RES_MU_S);
 
-					if (layerIndex < 0.5) {
-						layer = 0.0;
-					}
-				} else {
-					layer = 1.;
-				}
+			#ifdef INSCATTER_3D
+				float fragCoordY = gl_FragCoord.y;
+			#else
+				#if ALTITUDE_LAYERS > 1
+					float layerIndex = floor(gl_FragCoord.y / RES_MU);
+					float layer = pow(2., layerIndex) - 1.0;
+					float fragCoordY = mod(gl_FragCoord.y, RES_MU);
+				#else
+					float layer = 1.0;
+					float fragCoordY = gl_FragCoord.y;
+				#endif
 			#endif
 
-			float z = layer / max((RES_R_TOTAL - 1.0), 1.0);
-			vec3 uvw = vec3(uv, z);
+			float fragCoordZ = GetTextureCoordFromUnitRange(layer, RES_R_TOTAL);
+
+			vec4 uvwz = vec4(fragCoordNu, fragCoordMuS, fragCoordY, fragCoordZ) / SCATTERING_TEXTURE_SIZE;
 			
             float r, mu, muS, nu;
-            GetRMuMuSNuFromScatteringUvw(uvw, r, mu, muS, nu);
+            GetRMuMuSNuFromScatteringUvwz(uvwz, r, mu, muS, nu);
 
 			vec3 ray;
             float mie; // only calc the red channel

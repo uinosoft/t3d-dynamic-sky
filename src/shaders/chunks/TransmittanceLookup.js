@@ -21,7 +21,10 @@ export const TransmittanceLookup = `
 		float d_max = rho + H;
 		float x_mu = (d - d_min) / (d_max - d_min);
 		float x_r = rho / H;
-		return vec2(x_mu, x_r);
+		return vec2(
+			GetTextureCoordFromUnitRange(x_mu, TRANSMISSION_SIZE.x),
+			GetTextureCoordFromUnitRange(x_r, TRANSMISSION_SIZE.y)
+		);
 	}
 #endif
 
@@ -36,8 +39,8 @@ vec3 GetTransmittanceToTopAtmosphereBoundary(float r, float mu) {
 // assume segment x, x0 not intersecting ground 
 // d = distance between x and x0, mu = cos(zenith angle of [x,x0) ray at x) 
 vec3 GetTransmittance(float r, float mu, float d) {
-	float r_d = sqrt(r * r + d * d + 2.0 * r * mu * d);
-	float mu_d = (r * mu + d) / r_d;
+	float r_d = clamp(sqrt(r * r + d * d + 2.0 * r * mu * d), Rg, Rt);
+	float mu_d = clamp((r * mu + d) / r_d, -1.0, 1.0);
 	if (mu > 0.0) {
 		return min(GetTransmittanceToTopAtmosphereBoundary(r, mu) / GetTransmittanceToTopAtmosphereBoundary(r_d, mu_d), 1.0); 
 	} else {

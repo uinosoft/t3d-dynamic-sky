@@ -52,14 +52,15 @@ float OpticalDepth_O3(float r, float mu) {
 #else
 	void GetRMuFromTransmittanceUv(vec2 uv, out float r, out float mu) {
 		float H = sqrt(Rt * Rt - Rg * Rg);
-		float x_mu = uv.x;
-		float x_r = uv.y;
+		uv = gl_FragCoord.xy / TRANSMISSION_SIZE;
+		float x_mu = GetUnitRangeFromTextureCoord(uv.x, TRANSMISSION_SIZE.x);
+		float x_r = GetUnitRangeFromTextureCoord(uv.y, TRANSMISSION_SIZE.y);
 		float rho = H * x_r;
 		r = sqrt(rho * rho + Rg * Rg);
 		float d_min = Rt - r;
 		float d_max = rho + H;
 		float d = d_min + x_mu * (d_max - d_min);
-		mu = d <= 0.0 ? float(1.0) : (H * H - rho * rho - d * d) / (2.0 * r * d);
+		mu = d <= 0.0 ? 1.0 : (H * H - rho * rho - d * d) / (2.0 * r * d);
 		mu = clamp(mu, -1.0, 1.0);
 	}
 #endif

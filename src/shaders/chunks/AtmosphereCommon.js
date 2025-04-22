@@ -6,6 +6,8 @@ const float RES_MU = 128.; 	// height of the texture
 const float RES_MU_S = 32.; // width per table
 const float RES_NU = 8.;	// table per texture depth
 
+const vec2 TRANSMISSION_SIZE = vec2(256., 64.); // 256x64
+
 // ---------------------------------------------------------------------------- 
 // UTILITY FUNCTIONS
 // ---------------------------------------------------------------------------- 

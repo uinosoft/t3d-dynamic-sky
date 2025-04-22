@@ -2823,6 +2823,8 @@ const float RES_MU = 128.; 	// height of the texture
 const float RES_MU_S = 32.; // width per table
 const float RES_NU = 8.;	// table per texture depth
 
+const vec2 TRANSMISSION_SIZE = vec2(256., 64.); // 256x64
+
 // ---------------------------------------------------------------------------- 
 // UTILITY FUNCTIONS
 // ---------------------------------------------------------------------------- 
@@ -2875,7 +2877,10 @@ const TransmittanceLookup = `
 		float d_max = rho + H;
 		float x_mu = (d - d_min) / (d_max - d_min);
 		float x_r = rho / H;
-		return vec2(x_mu, x_r);
+		return vec2(
+			GetTextureCoordFromUnitRange(x_mu, TRANSMISSION_SIZE.x),
+			GetTextureCoordFromUnitRange(x_r, TRANSMISSION_SIZE.y)
+		);
 	}
 #endif
 
@@ -2890,8 +2895,8 @@ vec3 GetTransmittanceToTopAtmosphereBoundary(float r, float mu) {
 // assume segment x, x0 not intersecting ground 
 // d = distance between x and x0, mu = cos(zenith angle of [x,x0) ray at x) 
 vec3 GetTransmittance(float r, float mu, float d) {
-	float r_d = sqrt(r * r + d * d + 2.0 * r * mu * d);
-	float mu_d = (r * mu + d) / r_d;
+	float r_d = clamp(sqrt(r * r + d * d + 2.0 * r * mu * d), Rg, Rt);
+	float mu_d = clamp((r * mu + d) / r_d, -1.0, 1.0);
 	if (mu > 0.0) {
 		return min(GetTransmittanceToTopAtmosphereBoundary(r, mu) / GetTransmittanceToTopAtmosphereBoundary(r_d, mu_d), 1.0); 
 	} else {
@@ -3554,14 +3559,15 @@ float OpticalDepth_O3(float r, float mu) {
 #else
 	void GetRMuFromTransmittanceUv(vec2 uv, out float r, out float mu) {
 		float H = sqrt(Rt * Rt - Rg * Rg);
-		float x_mu = uv.x;
-		float x_r = uv.y;
+		uv = gl_FragCoord.xy / TRANSMISSION_SIZE;
+		float x_mu = GetUnitRangeFromTextureCoord(uv.x, TRANSMISSION_SIZE.x);
+		float x_r = GetUnitRangeFromTextureCoord(uv.y, TRANSMISSION_SIZE.y);
 		float rho = H * x_r;
 		r = sqrt(rho * rho + Rg * Rg);
 		float d_min = Rt - r;
 		float d_max = rho + H;
 		float d = d_min + x_mu * (d_max - d_min);
-		mu = d <= 0.0 ? float(1.0) : (H * H - rho * rho - d * d) / (2.0 * r * d);
+		mu = d <= 0.0 ? 1.0 : (H * H - rho * rho - d * d) / (2.0 * r * d);
 		mu = clamp(mu, -1.0, 1.0);
 	}
 #endif

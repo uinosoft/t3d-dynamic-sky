@@ -15,7 +15,7 @@ export const SkyShader = {
 		TONE_MAPPING: 5,
 		SRGB_OUTPUT: true,
 
-		NIGHT_SKY: true,
+		NIGHT_SKY: false,
 
 		SKY_SUNDISK: true
 	},

@@ -22,10 +22,19 @@ void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out flo
 			mu = (H * H - rho * rho - d * d) / (2.0 * r * d);
 			mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0); 
 		}
+	
 		// paper formula 
 		// muS = -(0.6 + log(1.0 - xMuS * (1.0 -  exp(-3.6)))) / 3.0; 
 		// better formula 
-		muS = tan((2.0 * xMuS - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75);
+		// muS = tan((2.0 * xMuS - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75);
+
+		float d_min = Rt - Rg;
+		float d_max = H;
+		float D = DistanceToTopAtmosphereBoundary(Rg, -0.2);
+		float A = (D - d_min) / (d_max - d_min);
+		float a = (A - xMuS * A) / (1.0 + xMuS * A);
+		float d = d_min + min(a, A) * (d_max - d_min);
+		muS = d == 0.0 ? 1.0 : clamp((H * H - d * d) / (2.0 * Rg * d), -1.0, 1.0);
 	#else 
 		mu = -1.0 + 2.0 * GetUnitRangeFromTextureCoord(uvwz.z, RES_MU);
 		muS = -0.2 + xMuS * 1.2;

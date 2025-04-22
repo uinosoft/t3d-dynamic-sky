@@ -35,4 +35,13 @@ float GetTextureCoordFromUnitRange(float x, float textureSize) {
 float GetUnitRangeFromTextureCoord(float u, float textureSize) {
 	return (u - 0.5 / textureSize) / (1.0 - 1.0 / textureSize);
 }
+
+float SafeSqrt(float a) {
+	return sqrt(max(a, 0.0));
+}
+
+float DistanceToTopAtmosphereBoundary(float r, float mu) {
+  float discriminant = r * r * (mu * mu - 1.0) + Rt * Rt;
+  return max(-r * mu + SafeSqrt(discriminant), 0.0);
+}
 `;

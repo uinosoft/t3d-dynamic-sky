@@ -1,5 +1,5 @@
 export const InscatterCompute = `
-void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out float muS, out float nu) {
+void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out float muS, out float nu, out bool rayIntersectsGround) {
 	float xMuS = GetUnitRangeFromTextureCoord(uvwz.y, RES_MU_S);
 
 	float H = sqrt(Rt * Rt - Rg * Rg);
@@ -12,15 +12,15 @@ void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out flo
 			float dmax = rho;
 			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvwz.z, RES_MU / 2.0);
 			mu = -(rho * rho + d * d) / (2.0 * r * d);
-			// clamp
-			// mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
-			mu = min(mu, -sqrt(1.0 - (Rg / r) * (Rg / r)) - 0.001); 
+			mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
+			rayIntersectsGround = true;
 		} else {
 			float dmin = Rt - r;
 			float dmax = rho + H;
 			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvwz.z - 1., RES_MU / 2.0);
 			mu = (H * H - rho * rho - d * d) / (2.0 * r * d);
-			mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0); 
+			mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0);
+			rayIntersectsGround = false;
 		}
 	
 		// paper formula 
@@ -43,29 +43,29 @@ void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out flo
 	nu = uvwz.x * 2.0 - 1.0;
 }
 
-void ComputeSingleScatteringIntegrand(float r, float mu, float muS, float nu, float d, out vec3 rayleigh, out float mie) { 
-	rayleigh = vec3(0.,0.,0.); 
-	mie = 0.0; // single channel only
-	float ri = sqrt(r * r + d * d + 2.0 * r * mu * d); 
-	float muSi = (nu * d + muS * r) / (ri * mix(1.0, betaR.w, max(0.0, muS))); // added betaR.w to fix the Rayleigh Offset artifacts issue
-	ri = max(Rg, ri);
-	if (muSi >= -sqrt(1.0 - Rg * Rg / (ri * ri))) { 
-		vec3 transmittance = GetTransmittance(r, mu, d) * GetTransmittanceToTopAtmosphereBoundary(ri, muSi); 
-		rayleigh = exp(-(ri - Rg) / HR) * transmittance; 
-		mie = exp(-(ri - Rg) / HM) * transmittance.x; // only calc the red channel
-	}
+void ComputeSingleScatteringIntegrand(float r, float mu, float muS, float nu, float d, bool rayIntersectsGround, out vec3 rayleigh, out float mie) {
+	float ri = clamp(sqrt(r * r + d * d + 2.0 * r * mu * d), Rg, Rt);
+	float muSi = (muS * r + nu * d) / (ri * mix(1.0, betaR.w, max(0.0, muS))); // added betaR.w to fix the Rayleigh Offset artifacts issue
+	muSi = clamp(muSi, -1.0, 1.0);
+
+	vec3 transmittance = GetTransmittance(r, mu, d, rayIntersectsGround) *
+		GetTransmittanceToSun(ri, muSi);
+
+	rayleigh = exp(-(ri - Rg) / HR) * transmittance;
+	mie = exp(-(ri - Rg) / HM) * transmittance.x; // only calc the red channel
 }
 
-void ComputeSingleScattering(float r, float mu, float muS, float nu, out vec3 ray, out float mie) {
+void ComputeSingleScattering(float r, float mu, float muS, float nu, bool rayIntersectsGround, out vec3 ray, out float mie) {
 	ray = vec3(0., 0., 0.);
 	mie = 0.0; // single channel only
 
-	float dx = Limit(r, mu) / float(INSCATTER_INTEGRAL_SAMPLES);
+	float dx = DistanceToNearestAtmosphereBoundary(r, mu, rayIntersectsGround)
+		/ float(INSCATTER_INTEGRAL_SAMPLES);
 
 	vec3 rayi;
 	float miei;
 
-	ComputeSingleScatteringIntegrand(r, mu, muS, nu, 0.0, rayi, miei);
+	ComputeSingleScatteringIntegrand(r, mu, muS, nu, 0.0, rayIntersectsGround, rayi, miei);
 
 	for (int i = 1; i <= INSCATTER_INTEGRAL_SAMPLES; ++i) {
 		float xj = float(i) * dx; 
@@ -73,7 +73,7 @@ void ComputeSingleScattering(float r, float mu, float muS, float nu, out vec3 ra
 		vec3 rayj;
 		float miej;
 
-		ComputeSingleScatteringIntegrand(r, mu, muS, nu, xj, rayj, miej);
+		ComputeSingleScatteringIntegrand(r, mu, muS, nu, xj, rayIntersectsGround, rayj, miej);
 		
 		ray += (rayi + rayj) / 2.0 * dx;
 		mie += (miei + miej) / 2.0 * dx;

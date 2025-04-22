@@ -3,7 +3,7 @@
 export const TransmittanceCompute = `
 // total optical length of rayleigh or mie
 float OpticalDepth(float H, float r, float mu) {
-	float dx = Limit(r, mu) / float(TRANSMITTANCE_INTEGRAL_SAMPLES);
+	float dx = DistanceToTopAtmosphereBoundary(r, mu) / float(TRANSMITTANCE_INTEGRAL_SAMPLES);
 	
 	float xi = 0.0;
 	float yi = exp(-(r - Rg) / H);
@@ -21,7 +21,7 @@ float OpticalDepth(float H, float r, float mu) {
 
 // total optical length of Ozone
 float OpticalDepth_O3(float r, float mu) {
-	float dx = Limit(r, mu) / float(TRANSMITTANCE_INTEGRAL_SAMPLES);
+	float dx = DistanceToTopAtmosphereBoundary(r, mu) / float(TRANSMITTANCE_INTEGRAL_SAMPLES);
 
 	float result = 0.0;
 	for (int i = 0; i <= TRANSMITTANCE_INTEGRAL_SAMPLES; ++i) {

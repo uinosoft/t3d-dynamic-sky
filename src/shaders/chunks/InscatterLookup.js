@@ -5,7 +5,7 @@ export const InscatterLookup = `
 	const float RES_R = float(ALTITUDE_LAYERS);
 #endif
 
-vec4 GetScatteringUvwzFromRMuMuSNu(float r, float mu, float muS, float nu) {
+vec4 GetScatteringUvwzFromRMuMuSNu(float r, float mu, float muS, float nu, bool rayIntersectsGround) {
 	float H = sqrt(Rt * Rt - Rg * Rg);
 	float rho = SafeSqrt(r * r - Rg * Rg);
 	float uR = GetTextureCoordFromUnitRange(rho / H, RES_R);
@@ -13,7 +13,7 @@ vec4 GetScatteringUvwzFromRMuMuSNu(float r, float mu, float muS, float nu) {
 		float rmu = r * mu;
 		float discriminant = rmu * rmu - r * r + Rg * Rg;
 		float uMu;
-		if (rmu < 0.0 && discriminant > 0.0) {
+		if (rayIntersectsGround) {
 			float d = -rmu - sqrt(discriminant);
 			float d_min = r - Rg;
 			float d_max = rho;
@@ -51,8 +51,8 @@ vec4 GetScatteringUvwzFromRMuMuSNu(float r, float mu, float muS, float nu) {
 	return vec4(uNu, uMuS, uMu, uR);
 }
 
-vec4 GetScattering(float r, float mu, float muS, float nu) {
-	vec4 uvwz = GetScatteringUvwzFromRMuMuSNu(r, mu, muS, nu);
+vec4 GetScattering(float r, float mu, float muS, float nu, bool rayIntersectsGround) {
+	vec4 uvwz = GetScatteringUvwzFromRMuMuSNu(r, mu, muS, nu, rayIntersectsGround);
 
 	float tex_coord_x = uvwz.x * (RES_NU - 1.0);
 	float tex_x = floor(tex_coord_x);

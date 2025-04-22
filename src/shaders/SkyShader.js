@@ -219,7 +219,7 @@ export const SkyShader = {
 
             transmittance = rayIntersectsGround ? vec3(0.0) : GetTransmittanceToTopAtmosphereBoundary(r, mu);
 
-			vec4 scattering = GetScattering(r, rMu / r, muS, nu);
+			vec4 scattering = GetScattering(r, rMu / r, muS, nu, rayIntersectsGround);
 			vec3 scatteringM = GetMie(scattering);
 
 			float phaseR = PhaseFunctionR();

@@ -71,11 +71,12 @@ export const InscatterShader = {
 			vec4 uvwz = vec4(fragCoordNu, fragCoordMuS, fragCoordY, fragCoordZ) / SCATTERING_TEXTURE_SIZE;
 			
             float r, mu, muS, nu;
-            GetRMuMuSNuFromScatteringUvwz(uvwz, r, mu, muS, nu);
+			bool rayIntersectsGround;
+            GetRMuMuSNuFromScatteringUvwz(uvwz, r, mu, muS, nu, rayIntersectsGround);
 
 			vec3 ray;
             float mie; // only calc the red channel
-            ComputeSingleScattering(r, mu, muS, nu, ray, mie);
+            ComputeSingleScattering(r, mu, muS, nu, rayIntersectsGround, ray, mie);
             
             // store only red component of single Mie scattering (cf. 'Angular precision')
             gl_FragColor = vec4(ray, mie);

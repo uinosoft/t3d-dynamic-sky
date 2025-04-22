@@ -12,22 +12,6 @@ const vec2 TRANSMISSION_SIZE = vec2(256., 64.); // 256x64
 // UTILITY FUNCTIONS
 // ---------------------------------------------------------------------------- 
 
-// nearest intersection of ray r, mu with ground or top atmosphere boundary 
-// mu = cos(ray zenith angle at ray origin) 
-float Limit(float r, float mu) { 
-    float dout = -r * mu + sqrt(r * r * (mu * mu - 1.0) + RL * RL);
-
-    float delta2 = r * r * (mu * mu - 1.0) + Rg * Rg;
-    if (delta2 >= 0.0) { 
-        float din = -r * mu - sqrt(delta2);
-        if (din >= 0.0) { 
-            dout = min(dout, din); 
-        } 
-    }
-    
-    return dout; 
-}
-
 float GetTextureCoordFromUnitRange(float x, float textureSize) {
 	return 0.5 / textureSize + x * (1.0 - 1.0 / textureSize);
 }
@@ -41,7 +25,20 @@ float SafeSqrt(float a) {
 }
 
 float DistanceToTopAtmosphereBoundary(float r, float mu) {
-  float discriminant = r * r * (mu * mu - 1.0) + Rt * Rt;
-  return max(-r * mu + SafeSqrt(discriminant), 0.0);
+	float discriminant = r * r * (mu * mu - 1.0) + Rt * Rt;
+	return max(-r * mu + SafeSqrt(discriminant), 0.0);
+}
+
+float DistanceToBottomAtmosphereBoundary(float r, float mu) {
+	float discriminant = r * r * (mu * mu - 1.0) + Rg * Rg;
+	return max(-r * mu - SafeSqrt(discriminant), 0.0);
+}
+
+float DistanceToNearestAtmosphereBoundary(float r, float mu, bool rayIntersectsGround) {
+	if (rayIntersectsGround) {
+		return DistanceToBottomAtmosphereBoundary(r, mu);
+	} else {
+		return DistanceToTopAtmosphereBoundary(r, mu);
+	}
 }
 `;

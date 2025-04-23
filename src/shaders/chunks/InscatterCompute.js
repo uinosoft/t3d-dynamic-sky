@@ -11,15 +11,13 @@ void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out flo
 			float dmin = r - Rg;
 			float dmax = rho;
 			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvwz.z, RES_MU / 2.0);
-			mu = -(rho * rho + d * d) / (2.0 * r * d);
-			mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
+			mu = d == 0.0 ? -1.0 : ClampCosine(-(rho * rho + d * d) / (2.0 * r * d));
 			rayIntersectsGround = true;
 		} else {
 			float dmin = Rt - r;
 			float dmax = rho + H;
 			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvwz.z - 1., RES_MU / 2.0);
-			mu = (H * H - rho * rho - d * d) / (2.0 * r * d);
-			mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0);
+			mu = d == 0.0 ? 1.0 : ClampCosine((H * H - rho * rho - d * d) / (2.0 * r * d));
 			rayIntersectsGround = false;
 		}
 	
@@ -34,19 +32,20 @@ void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out flo
 		float A = (D - d_min) / (d_max - d_min);
 		float a = (A - xMuS * A) / (1.0 + xMuS * A);
 		float d = d_min + min(a, A) * (d_max - d_min);
-		muS = d == 0.0 ? 1.0 : clamp((H * H - d * d) / (2.0 * Rg * d), -1.0, 1.0);
+		muS = d == 0.0 ? 1.0 : ClampCosine((H * H - d * d) / (2.0 * Rg * d));
 	#else 
 		mu = -1.0 + 2.0 * GetUnitRangeFromTextureCoord(uvwz.z, RES_MU);
 		muS = -0.2 + xMuS * 1.2;
 	#endif
 
-	nu = uvwz.x * 2.0 - 1.0;
+	nu = ClampCosine(uvwz.x * 2.0 - 1.0);
 }
 
 void ComputeSingleScatteringIntegrand(float r, float mu, float muS, float nu, float d, bool rayIntersectsGround, out vec3 rayleigh, out float mie) {
-	float ri = clamp(sqrt(r * r + d * d + 2.0 * r * mu * d), Rg, Rt);
-	float muSi = (muS * r + nu * d) / (ri * mix(1.0, betaR.w, max(0.0, muS))); // added betaR.w to fix the Rayleigh Offset artifacts issue
-	muSi = clamp(muSi, -1.0, 1.0);
+	float ri = ClampRadius(sqrt(r * r + d * d + 2.0 * r * mu * d));
+	float muSi = ClampCosine(
+		(muS * r + nu * d) / (ri * mix(1.0, betaR.w, max(0.0, muS))) // added betaR.w to fix the Rayleigh Offset artifacts issue
+	);
 
 	vec3 transmittance = GetTransmittance(r, mu, d, rayIntersectsGround) *
 		GetTransmittanceToSun(ri, muSi);

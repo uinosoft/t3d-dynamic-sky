@@ -20,18 +20,30 @@ float GetUnitRangeFromTextureCoord(float u, float textureSize) {
 	return (u - 0.5 / textureSize) / (1.0 - 1.0 / textureSize);
 }
 
+float ClampCosine(float mu) {
+	return clamp(mu, -1.0, 1.0);
+}
+
+float ClampDistance(float d) {
+	return max(d, 0.0);
+}
+
+float ClampRadius(float r) {
+	return clamp(r, Rg, Rt);
+}
+
 float SafeSqrt(float a) {
 	return sqrt(max(a, 0.0));
 }
 
 float DistanceToTopAtmosphereBoundary(float r, float mu) {
 	float discriminant = r * r * (mu * mu - 1.0) + Rt * Rt;
-	return max(-r * mu + SafeSqrt(discriminant), 0.0);
+	return ClampDistance(-r * mu + SafeSqrt(discriminant));
 }
 
 float DistanceToBottomAtmosphereBoundary(float r, float mu) {
 	float discriminant = r * r * (mu * mu - 1.0) + Rg * Rg;
-	return max(-r * mu - SafeSqrt(discriminant), 0.0);
+	return ClampDistance(-r * mu - SafeSqrt(discriminant));
 }
 
 float DistanceToNearestAtmosphereBoundary(float r, float mu, bool rayIntersectsGround) {

@@ -61,7 +61,7 @@ float OpticalDepth_O3(float r, float mu) {
 		float d_max = rho + H;
 		float d = d_min + x_mu * (d_max - d_min);
 		mu = d <= 0.0 ? 1.0 : (H * H - rho * rho - d * d) / (2.0 * r * d);
-		mu = clamp(mu, -1.0, 1.0);
+		mu = ClampCosine(mu);
 	}
 #endif
 

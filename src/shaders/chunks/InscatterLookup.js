@@ -14,7 +14,7 @@ vec4 GetScatteringUvwzFromRMuMuSNu(float r, float mu, float muS, float nu, bool 
 		float discriminant = rmu * rmu - r * r + Rg * Rg;
 		float uMu;
 		if (rayIntersectsGround) {
-			float d = -rmu - sqrt(discriminant);
+			float d = -rmu - SafeSqrt(discriminant);
 			float d_min = r - Rg;
 			float d_max = rho;
 			uMu = 0.5 - 0.5 * GetTextureCoordFromUnitRange(d_max == d_min ? 0.0 : (d - d_min) / (d_max - d_min), RES_MU / 2.);

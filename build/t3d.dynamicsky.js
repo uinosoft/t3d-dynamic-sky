@@ -392,18 +392,30 @@ float GetUnitRangeFromTextureCoord(float u, float textureSize) {
 	return (u - 0.5 / textureSize) / (1.0 - 1.0 / textureSize);
 }
 
+float ClampCosine(float mu) {
+	return clamp(mu, -1.0, 1.0);
+}
+
+float ClampDistance(float d) {
+	return max(d, 0.0);
+}
+
+float ClampRadius(float r) {
+	return clamp(r, Rg, Rt);
+}
+
 float SafeSqrt(float a) {
 	return sqrt(max(a, 0.0));
 }
 
 float DistanceToTopAtmosphereBoundary(float r, float mu) {
 	float discriminant = r * r * (mu * mu - 1.0) + Rt * Rt;
-	return max(-r * mu + SafeSqrt(discriminant), 0.0);
+	return ClampDistance(-r * mu + SafeSqrt(discriminant));
 }
 
 float DistanceToBottomAtmosphereBoundary(float r, float mu) {
 	float discriminant = r * r * (mu * mu - 1.0) + Rg * Rg;
-	return max(-r * mu - SafeSqrt(discriminant), 0.0);
+	return ClampDistance(-r * mu - SafeSqrt(discriminant));
 }
 
 float DistanceToNearestAtmosphereBoundary(float r, float mu, bool rayIntersectsGround) {
@@ -463,8 +475,8 @@ vec3 GetTransmittanceToSun(float r, float mu) {
 // assume segment x, x0 not intersecting ground 
 // d = distance between x and x0, mu = cos(zenith angle of [x,x0) ray at x) 
 vec3 GetTransmittance(float r, float mu, float d, bool rayIntersectsGround) {
-	float r_d = clamp(sqrt(r * r + d * d + 2.0 * r * mu * d), Rg, Rt);
-	float mu_d = clamp((r * mu + d) / r_d, -1.0, 1.0);
+	float r_d = ClampRadius(sqrt(r * r + d * d + 2.0 * r * mu * d));
+	float mu_d = ClampCosine((r * mu + d) / r_d);
 	if (rayIntersectsGround) {
 		return min(
 			GetTransmittanceToTopAtmosphereBoundary(r_d, -mu_d) /
@@ -495,7 +507,7 @@ vec4 GetScatteringUvwzFromRMuMuSNu(float r, float mu, float muS, float nu, bool 
 		float discriminant = rmu * rmu - r * r + Rg * Rg;
 		float uMu;
 		if (rayIntersectsGround) {
-			float d = -rmu - sqrt(discriminant);
+			float d = -rmu - SafeSqrt(discriminant);
 			float d_min = r - Rg;
 			float d_max = rho;
 			uMu = 0.5 - 0.5 * GetTextureCoordFromUnitRange(d_max == d_min ? 0.0 : (d - d_min) / (d_max - d_min), RES_MU / 2.);
@@ -1138,7 +1150,7 @@ float OpticalDepth_O3(float r, float mu) {
 		float d_max = rho + H;
 		float d = d_min + x_mu * (d_max - d_min);
 		mu = d <= 0.0 ? 1.0 : (H * H - rho * rho - d * d) / (2.0 * r * d);
-		mu = clamp(mu, -1.0, 1.0);
+		mu = ClampCosine(mu);
 	}
 #endif
 
@@ -1202,15 +1214,13 @@ void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out flo
 			float dmin = r - Rg;
 			float dmax = rho;
 			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(1. - 2. * uvwz.z, RES_MU / 2.0);
-			mu = -(rho * rho + d * d) / (2.0 * r * d);
-			mu = d == 0.0 ? -1.0 : clamp(mu, -1.0, 1.0);
+			mu = d == 0.0 ? -1.0 : ClampCosine(-(rho * rho + d * d) / (2.0 * r * d));
 			rayIntersectsGround = true;
 		} else {
 			float dmin = Rt - r;
 			float dmax = rho + H;
 			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvwz.z - 1., RES_MU / 2.0);
-			mu = (H * H - rho * rho - d * d) / (2.0 * r * d);
-			mu = d == 0.0 ? 1.0 : clamp(mu, -1.0, 1.0);
+			mu = d == 0.0 ? 1.0 : ClampCosine((H * H - rho * rho - d * d) / (2.0 * r * d));
 			rayIntersectsGround = false;
 		}
 	
@@ -1225,19 +1235,20 @@ void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out flo
 		float A = (D - d_min) / (d_max - d_min);
 		float a = (A - xMuS * A) / (1.0 + xMuS * A);
 		float d = d_min + min(a, A) * (d_max - d_min);
-		muS = d == 0.0 ? 1.0 : clamp((H * H - d * d) / (2.0 * Rg * d), -1.0, 1.0);
+		muS = d == 0.0 ? 1.0 : ClampCosine((H * H - d * d) / (2.0 * Rg * d));
 	#else 
 		mu = -1.0 + 2.0 * GetUnitRangeFromTextureCoord(uvwz.z, RES_MU);
 		muS = -0.2 + xMuS * 1.2;
 	#endif
 
-	nu = uvwz.x * 2.0 - 1.0;
+	nu = ClampCosine(uvwz.x * 2.0 - 1.0);
 }
 
 void ComputeSingleScatteringIntegrand(float r, float mu, float muS, float nu, float d, bool rayIntersectsGround, out vec3 rayleigh, out float mie) {
-	float ri = clamp(sqrt(r * r + d * d + 2.0 * r * mu * d), Rg, Rt);
-	float muSi = (muS * r + nu * d) / (ri * mix(1.0, betaR.w, max(0.0, muS))); // added betaR.w to fix the Rayleigh Offset artifacts issue
-	muSi = clamp(muSi, -1.0, 1.0);
+	float ri = ClampRadius(sqrt(r * r + d * d + 2.0 * r * mu * d));
+	float muSi = ClampCosine(
+		(muS * r + nu * d) / (ri * mix(1.0, betaR.w, max(0.0, muS))) // added betaR.w to fix the Rayleigh Offset artifacts issue
+	);
 
 	vec3 transmittance = GetTransmittance(r, mu, d, rayIntersectsGround) *
 		GetTransmittanceToSun(ri, muSi);

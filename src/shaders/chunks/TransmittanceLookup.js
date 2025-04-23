@@ -46,8 +46,8 @@ vec3 GetTransmittanceToSun(float r, float mu) {
 // assume segment x, x0 not intersecting ground 
 // d = distance between x and x0, mu = cos(zenith angle of [x,x0) ray at x) 
 vec3 GetTransmittance(float r, float mu, float d, bool rayIntersectsGround) {
-	float r_d = clamp(sqrt(r * r + d * d + 2.0 * r * mu * d), Rg, Rt);
-	float mu_d = clamp((r * mu + d) / r_d, -1.0, 1.0);
+	float r_d = ClampRadius(sqrt(r * r + d * d + 2.0 * r * mu * d));
+	float mu_d = ClampCosine((r * mu + d) / r_d);
 	if (rayIntersectsGround) {
 		return min(
 			GetTransmittanceToTopAtmosphereBoundary(r_d, -mu_d) /

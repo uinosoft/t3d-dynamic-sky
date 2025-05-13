@@ -16,6 +16,7 @@ void GetRMuMuSNuFromScatteringUvwz(vec4 uvwz, out float r, out float mu, out flo
 		} else {
 			float dmin = Rt - r;
 			float dmax = rho + H;
+			uvwz.z = clamp(uvwz.z, 0.5, 0.99); // fix jagged bright lines at the horizon, but why ?
 			float d = dmin + (dmax - dmin) * GetUnitRangeFromTextureCoord(2. * uvwz.z - 1., RES_MU / 2.0);
 			mu = d == 0.0 ? 1.0 : ClampCosine((H * H - rho * rho - d * d) / (2.0 * r * d));
 			rayIntersectsGround = false;
